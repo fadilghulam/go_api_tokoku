@@ -447,3 +447,15 @@ func ByteResponse(responseBody []byte) (map[string]interface{}, error) {
 
 	return responseData, nil
 }
+
+func PostBody(body []byte) (map[string]interface{}, error) {
+	// bodyBytes := c.Body()
+
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(body), &data); err != nil {
+		fmt.Println("Error:", err)
+		return nil, err
+	}
+
+	return data, nil
+}

@@ -45,6 +45,14 @@ func Setup(app *fiber.App) {
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.SendString("Landing Page!")
 	})
+	// app.Get("go_api/", func(c *fiber.Ctx) error {
+	// 	return c.SendString("Landing Page 2!")
+	// })
+
+	testGroup := app.Group("go_api")
+	testGroup.Get("/", func(c *fiber.Ctx) error {
+		return c.SendString("Landing Page 3!")
+	})
 
 	//authentication routes
 	app.Post("/login", controllers.Login)
@@ -62,6 +70,12 @@ func Setup(app *fiber.App) {
 	authGroup.Get("/transactions", controllers.GetTransactions)
 	authGroup.Get("/points", controllers.GetPointsCustomer)
 	authGroup.Get("/pointsHistory", controllers.GetPointsHistory)
+
+	//Cart routes
+	authGroup.Post("/cart", controllers.InsertCart)
+	authGroup.Get("/cart", controllers.GetCart)
+	authGroup.Post("/deleteCart", controllers.DeleteCart)
+
 	// app.Get("/payments/:paymentId", controllers.GetPaymentDetails)
 	// app.Post("/payments", controllers.CreatePayment)
 	// app.Delete("/payments/:paymentId", controllers.DeletePayment)

@@ -89,7 +89,8 @@ func GetProdukDetail(c *fiber.Ctx) error {
 				pk.name as type,
 				rh.harga,
 				COALESCE(dis.nominal,0) as discount,
-				COALESCE(pt.value,0) as point
+				COALESCE(pt.value,0) as point,
+				0 as stock
 		FROM produk p
 		JOIN produk_kategori pk
 			ON p.kategori_id = pk.id
