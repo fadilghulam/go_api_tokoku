@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"encoding/json"
 	"fmt"
 	db "go_api_tokoku/config"
 	"go_api_tokoku/helpers"
@@ -14,14 +13,18 @@ import (
 
 func InsertCart(c *fiber.Ctx) error {
 
-	inputBody, err := helpers.PostBody(c.Body())
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{Message: err.Error(), Success: false})
-	}
+	// inputBody, err := helpers.PostBody(c.Body())
+	// if err != nil {
+	// 	return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{Message: err.Error(), Success: false})
+	// }
 
-	customerId := inputBody["customer_id"].(float64)
-	produkId := inputBody["produk_id"].(float64)
-	qty := inputBody["qty"].(float64)
+	// customerId := inputBody["customer_id"].(float64)
+	// produkId := inputBody["produk_id"].(float64)
+	// qty := inputBody["qty"].(float64)
+
+	customerId := c.FormValue("customer_id")
+	produkId := c.FormValue("produk_id")
+	qty := c.FormValue("qty")
 
 	result := db.DB.Exec(
 		fmt.Sprintf(
@@ -45,6 +48,44 @@ func InsertCart(c *fiber.Ctx) error {
 		} else {
 			return c.Status(fiber.StatusNotFound).JSON(helpers.ResponseWithoutData{
 				Message: "Insert failed",
+				Success: true,
+			})
+		}
+	}
+}
+
+func UpdateCart(c *fiber.Ctx) error {
+	cartId := c.FormValue("cart_id")
+	qty := c.FormValue("qty")
+
+	newQty, _ := strconv.Atoi(qty)
+
+	var query = ""
+	if newQty != 0 {
+		query = fmt.Sprintf(
+			`UPDATE tk.cart SET qty = %v, updated_at = now() WHERE id = %v`, newQty, cartId)
+	} else {
+		query = fmt.Sprintf(
+			`DELETE FROM tk.cart WHERE id = %v`, cartId)
+	}
+
+	result := db.DB.Exec(query)
+
+	if result.Error != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Update failed",
+			Success: true,
+		})
+	} else {
+		rowsAffected := result.RowsAffected
+		if rowsAffected > 0 {
+			return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
+				Message: "Cart has been updated",
+				Success: true,
+			})
+		} else {
+			return c.Status(fiber.StatusNotFound).JSON(helpers.ResponseWithoutData{
+				Message: "Update failed",
 				Success: true,
 			})
 		}
@@ -166,17 +207,19 @@ func GetCart(c *fiber.Ctx) error {
 
 func DeleteCart(c *fiber.Ctx) error {
 
-	bodyBytes := c.Body()
+	// bodyBytes := c.Body()
 
-	var data map[string]interface{}
-	if err := json.Unmarshal([]byte(bodyBytes), &data); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
-			Message: err.Error(),
-			Success: false,
-		})
-	}
+	// var data map[string]interface{}
+	// if err := json.Unmarshal([]byte(bodyBytes), &data); err != nil {
+	// 	return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+	// 		Message: err.Error(),
+	// 		Success: false,
+	// 	})
+	// }
 
-	cartIds := data["id_cart"].(string)
+	// cartIds := data["id_cart"].(string)
+
+	cartIds := c.FormValue("cart_id")
 
 	var carts []model.Cart
 
@@ -187,10 +230,26 @@ func DeleteCart(c *fiber.Ctx) error {
 		ids = append(ids, tempId)
 	}
 
-	db.DB.Delete(&carts, ids)
+	result := db.DB.Delete(&carts, ids)
 
-	return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
-		Message: "Data has been deleted",
-		Success: true,
-	})
+	if result.Error != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: result.Error.Error(),
+			Success: false,
+		})
+	} else {
+		rowsAffected := result.RowsAffected
+		if rowsAffected > 0 {
+			return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
+				Message: "Data has been deleted",
+				Success: true,
+			})
+		} else {
+			return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
+				Message: "No data has been deleted",
+				Success: true,
+			})
+		}
+	}
+
 }

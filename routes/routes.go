@@ -45,9 +45,6 @@ func Setup(app *fiber.App) {
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.SendString("Landing Page!")
 	})
-	// app.Get("go_api/", func(c *fiber.Ctx) error {
-	// 	return c.SendString("Landing Page 2!")
-	// })
 
 	testGroup := app.Group("go_api")
 	testGroup.Get("/", func(c *fiber.Ctx) error {
@@ -74,20 +71,8 @@ func Setup(app *fiber.App) {
 	//Cart routes
 	authGroup.Post("/cart", controllers.InsertCart)
 	authGroup.Get("/cart", controllers.GetCart)
-	authGroup.Post("/deleteCart", controllers.DeleteCart)
-
-	// app.Get("/payments/:paymentId", controllers.GetPaymentDetails)
-	// app.Post("/payments", controllers.CreatePayment)
-	// app.Delete("/payments/:paymentId", controllers.DeletePayment)
-	// app.Put("/payments/:paymentId", controllers.UpdatePayment)
-
-	// //Order routes
-	// app.Get("/orders", controllers.OrdersList)
-	// app.Get("/orders/:orderId", controllers.OrderDetail)
-	// app.Post("/orders", controllers.CreateOrder)
-	// app.Post("/orders/subtotal", controllers.SubTotalOrder)
-	// app.Get("/orders/:orderId/download", controllers.DownloadOrder)
-	// app.Get("/orders/:orderId/check-download", controllers.CheckOrder)
+	authGroup.Put("/updateCart", controllers.UpdateCart)
+	authGroup.Delete("/deleteCart", controllers.DeleteCart)
 
 	// //reports
 	// app.Get("/revenues", controllers.GetRevenues)
