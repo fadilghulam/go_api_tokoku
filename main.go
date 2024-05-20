@@ -11,6 +11,7 @@ import (
 )
 
 func main() {
+	os.Setenv("TZ", "Asia/Jakarta")
 	fmt.Println("app running...")
 	//db connection
 	db.Connect()

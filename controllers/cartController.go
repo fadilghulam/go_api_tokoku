@@ -31,8 +31,8 @@ func InsertCart(c *fiber.Ctx) error {
 		fmt.Sprintf(
 			`INSERT INTO tk.cart (customer_id, produk_id, qty, date_cart, store_id) 
 				VALUES (%v, %v, %v, CURRENT_DATE, %v)
-				ON CONFLICT (customer_id, produk_id, date_cart) 
-				DO UPDATE SET qty = (cart.qty + excluded.qty)`, customerId, produkId, qty, storeId))
+				ON CONFLICT (customer_id, produk_id, date_cart, store_id) 
+				DO UPDATE SET qty = (cart.qty + excluded.qty), updated_at = now()`, customerId, produkId, qty, storeId))
 
 	if result.Error != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
@@ -133,7 +133,7 @@ func GetCart(c *fiber.Ctx) error {
 													'name', 'Promo 123'
 												)
 									)
-					) ORDER BY cart.id
+					) ORDER BY cart.id DESC
 				) as items
 	FROM tk.cart cart
 	JOIN produk p
@@ -159,7 +159,8 @@ func GetCart(c *fiber.Ctx) error {
 		ON p.id = pt.produk_id
 		AND CURRENT_DATE BETWEEN pt.date_start AND COALESCE(pt.date_end, CURRENT_DATE)
 		AND c.branch_id = pt.branch_id
-	GROUP BY cart.store_id, cart.customer_id`, customerId))
+	GROUP BY cart.store_id, cart.customer_id
+	ORDER BY MAX(cart.updated_at) DESC `, customerId))
 
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseDataMultiple{
