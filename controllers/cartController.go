@@ -25,13 +25,14 @@ func InsertCart(c *fiber.Ctx) error {
 	customerId := c.FormValue("customer_id")
 	produkId := c.FormValue("produk_id")
 	qty := c.FormValue("qty")
+	storeId := c.FormValue("store_id")
 
 	result := db.DB.Exec(
 		fmt.Sprintf(
-			`INSERT INTO tk.cart (customer_id, produk_id, qty, date_cart) 
-				VALUES (%v, %v, %v, CURRENT_DATE)
+			`INSERT INTO tk.cart (customer_id, produk_id, qty, date_cart, store_id) 
+				VALUES (%v, %v, %v, CURRENT_DATE, %v)
 				ON CONFLICT (customer_id, produk_id, date_cart) 
-				DO UPDATE SET qty = (cart.qty + excluded.qty)`, customerId, produkId, qty))
+				DO UPDATE SET qty = (cart.qty + excluded.qty)`, customerId, produkId, qty, storeId))
 
 	if result.Error != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
@@ -66,7 +67,7 @@ func UpdateCart(c *fiber.Ctx) error {
 			`UPDATE tk.cart SET qty = %v, updated_at = now() WHERE id = %v`, newQty, cartId)
 	} else {
 		query = fmt.Sprintf(
-			`DELETE FROM tk.cart WHERE id = %v`, cartId)
+			`DELETE FROM tk.cart WHERE id IN(%v)`, cartId)
 	}
 
 	result := db.DB.Exec(query)
@@ -112,50 +113,53 @@ func GetCart(c *fiber.Ctx) error {
 	customerId := c.Query("customerId")
 
 	results, err := helpers.ExecuteQuery(fmt.Sprintf(
-		`SELECT cart.customer_id,
-					cart.id,
-					cart.qty,
-					0 as stock,
-					JSONB_AGG(
-						JSONB_BUILD_OBJECT(
-							'id', p.id,
-							'code', p.code,
-							'name', p.name,
-							'discount', COALESCE(dis.nominal,0),
-							'harga', rh.harga,
-							'image', p.foto,
-							'point', COALESCE(pt.value,0),
-							'promo', JSONB_BUILD_OBJECT(
-										'id', 1,
-										'name', 'Promo 123'
+		`SELECT cart.store_id,
+				cart.customer_id,
+				JSONB_AGG(
+					JSONB_BUILD_OBJECT(
+						'id', cart.id,
+						'qty', cart.qty,
+						'stock', 0,
+						'product', JSONB_BUILD_OBJECT(
+										'id', p.id,
+										'code', p.code,
+										'name', p.name,
+										'discount', COALESCE(dis.nominal,0),
+										'harga', rh.harga,
+										'image', p.foto,
+										'point', COALESCE(pt.value,0),
+										'promo', JSONB_BUILD_OBJECT(
+													'id', 1,
+													'name', 'Promo 123'
+												)
 									)
-						) ORDER BY cart.id
-					) as product
-			FROM tk.cart cart
-			JOIN produk p
-				ON cart.produk_id = p.id
-			JOIN customer c
-				ON c.id = %s
-			JOIN salesman s
-				ON c.salesman_id = s.id
-			LEFT JOIN ref_harga_master rhm
-				ON c.branch_id = rhm.branch_id
-			AND CURRENT_DATE BETWEEN rhm.date_start AND COALESCE(rhm.date_end, CURRENT_DATE)
-			LEFT JOIN ref_harga rh
-				ON rhm.id = rh.ref_harga_master_id
-				AND c.tipe = rh.customer_tipe
-				AND s.tipe_salesman = rh.salesman_tipe
-				AND p.id = rh.produk_id
-			LEFT JOIN tk.discount dis
-				ON p.id = dis.produk_id
-				AND CURRENT_DATE BETWEEN dis.date_start AND COALESCE(dis.date_end, CURRENT_DATE)
-				AND c.branch_id = dis.branch_id
-				AND c.tipe = dis.customer_type_id
-			LEFT JOIN tk.points pt
-				ON p.id = pt.produk_id
-				AND CURRENT_DATE BETWEEN pt.date_start AND COALESCE(pt.date_end, CURRENT_DATE)
-				AND c.branch_id = pt.branch_id
-			GROUP BY cart.id`, customerId))
+					) ORDER BY cart.id
+				) as items
+	FROM tk.cart cart
+	JOIN produk p
+		ON cart.produk_id = p.id
+	JOIN customer c
+		ON c.id = %s
+	JOIN salesman s
+		ON c.salesman_id = s.id
+	LEFT JOIN ref_harga_master rhm
+		ON c.branch_id = rhm.branch_id
+	AND CURRENT_DATE BETWEEN rhm.date_start AND COALESCE(rhm.date_end, CURRENT_DATE)
+	LEFT JOIN ref_harga rh
+		ON rhm.id = rh.ref_harga_master_id
+		AND c.tipe = rh.customer_tipe
+		AND s.tipe_salesman = rh.salesman_tipe
+		AND p.id = rh.produk_id
+	LEFT JOIN tk.discount dis
+		ON p.id = dis.produk_id
+		AND CURRENT_DATE BETWEEN dis.date_start AND COALESCE(dis.date_end, CURRENT_DATE)
+		AND c.branch_id = dis.branch_id
+		AND c.tipe = dis.customer_type_id
+	LEFT JOIN tk.points pt
+		ON p.id = pt.produk_id
+		AND CURRENT_DATE BETWEEN pt.date_start AND COALESCE(pt.date_end, CURRENT_DATE)
+		AND c.branch_id = pt.branch_id
+	GROUP BY cart.store_id, cart.customer_id`, customerId))
 
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseDataMultiple{
@@ -165,7 +169,7 @@ func GetCart(c *fiber.Ctx) error {
 		})
 	}
 	if len(results) == 0 {
-		return c.Status(fiber.StatusNotFound).JSON(helpers.ResponseDataMultiple{
+		return c.Status(fiber.StatusOK).JSON(helpers.ResponseDataMultiple{
 			Message: "Cart not found",
 			Success: true,
 			Data:    nil,
