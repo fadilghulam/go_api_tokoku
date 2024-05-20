@@ -58,6 +58,7 @@ func Setup(app *fiber.App) {
 	})
 	webSocketGroup.Get("/echo", websocket.New(controllers.EchoHandler))
 	webSocketGroup.Get("/print", websocket.New(controllers.EchoHandler2))
+	webSocketGroup.Get("/addition", websocket.New(controllers.TestHandler))
 
 	//authentication routes
 	app.Post("/login", controllers.Login)

@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"encoding/json"
 	"log"
 	"time"
 
@@ -73,6 +74,56 @@ func EchoHandler2(c *websocket.Conn) {
 	}
 }
 
-// func ServeHTML(w http.ResponseWriter, r *http.Request) {
-// 	http.ServeFile(w, r, "websockets.html")
+// type Message struct {
+// 	Num1   float64 `json:"num1"`
+// 	Num2   float64 `json:"num2"`
+// 	Result float64 `json:"result,omitempty"`
 // }
+
+func TestHandler(c *websocket.Conn) {
+	defer c.Close()
+	for {
+		_, msg, err := c.ReadMessage()
+		if err != nil {
+			log.Println("Error reading message:", err)
+			return
+		}
+
+		// var message Message
+		// if err := json.Unmarshal(msg, &message); err != nil {
+		// 	log.Println("Error unmarshalling JSON:", err)
+		// 	continue
+		// }
+
+		var message map[string]interface{}
+		if err := json.Unmarshal(msg, &message); err != nil {
+			log.Println("Error unmarshalling JSON:", err)
+			continue
+		}
+
+		// Perform addition
+		num1, ok1 := message["num1"].(float64)
+		num2, ok2 := message["num2"].(float64)
+		if !ok1 || !ok2 {
+			log.Println("Invalid numbers")
+			continue
+		}
+
+		// Perform addition
+		result := num1 + num2
+		// message.Result = message.Num1 + message.Num2
+
+		message["result"] = result
+		// Send result back to client
+		response, err := json.Marshal(message)
+		if err != nil {
+			log.Println("Error marshalling JSON:", err)
+			continue
+		}
+
+		if err := c.WriteMessage(websocket.TextMessage, response); err != nil {
+			log.Println("Error writing message:", err)
+			return
+		}
+	}
+}

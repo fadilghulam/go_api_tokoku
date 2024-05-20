@@ -1,13 +1,21 @@
 <!-- websockets.html -->
 <input id="input" type="text" />
+<p></p>
 <button onclick="send()">Send</button>
-<button onclick="newSend()">Send #2</button>
+<button onclick="newSend()">Send for server 2</button>
+<p></p>
+<input type="number" id="num1" placeholder="Number 1">
+<input type="number" id="num2" placeholder="Number 2">
+<p></p>
+<button onclick="send3()">Addition</button>
 <pre id="output"></pre>
+<p id="result"></p>
 <script>
     var input = document.getElementById("input");
     var output = document.getElementById("output");
     var socket = new WebSocket("ws://localhost:4000/ws/echo");
     var socket2 = new WebSocket("ws://localhost:4000/ws/print");
+    var socket3 = new WebSocket("ws://localhost:4000/ws/addition");
 
     socket.onopen = function () {
         output.innerHTML += "Status: Socket 1 Connected\n";
@@ -15,6 +23,10 @@
 
     socket2.onopen = function () {
         output.innerHTML += "Status: Socket 2 Connected\n";
+    };
+
+    socket3.onopen = function () {
+        output.innerHTML += "Status: Socket 3 Connected\n";
     };
 
     socket.onmessage = function (e) {
@@ -25,6 +37,15 @@
         output.innerHTML += "Server 2: " + e.data + "\n";
     };
 
+    socket3.onmessage = function (e) {
+
+            const message = JSON.parse(e.data);
+        //     // document.getElementById('result').innerText = 'Result: ' + message.result;
+        //     output.innerHTML += "Result : " + message.data + "\n";
+
+        output.innerHTML += "Server 3: " + message.result + "\n";
+    };
+
     function send() {
         socket.send(input.value);
         input.value = "";
@@ -33,5 +54,34 @@
     function newSend() {
         socket2.send(input.value);
         input.value = "";
+    }
+
+    function send3(){
+        const num1 = parseFloat(document.getElementById('num1').value);
+        const num2 = parseFloat(document.getElementById('num2').value);
+
+        console.log(num1, num2);
+            
+        const message = { num1: num1, num2: num2 };
+        socket3.send(JSON.stringify(message));
+        // const socket = new WebSocket('ws://localhost:4000/ws/addition');
+
+        // socket3.onopen = function(event) {
+        //     output.innerHTML += "Status: Socket 3 Connected\n";
+        //     console.log("a")
+        // };
+        
+        // socket3.onmessage = function(event) {
+        //     console.log("b")
+        //     const message = JSON.parse(event.data);
+        //     // document.getElementById('result').innerText = 'Result: ' + message.result;
+        //     output.innerHTML += "Result : " + message.data + "\n";
+
+        //     socket3.close();
+        // };
+
+        // socket3.onerror = function(event) {
+        //     console.error('WebSocket error observed:', event);
+        // };
     }
 </script>
