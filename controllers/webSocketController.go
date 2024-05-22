@@ -2,8 +2,11 @@ package controllers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"time"
+
+	"strconv"
 
 	"github.com/gofiber/websocket/v2"
 )
@@ -115,6 +118,70 @@ func TestHandler(c *websocket.Conn) {
 
 		message["result"] = result
 		// Send result back to client
+		response, err := json.Marshal(message)
+		if err != nil {
+			log.Println("Error marshalling JSON:", err)
+			continue
+		}
+
+		if err := c.WriteMessage(websocket.TextMessage, response); err != nil {
+			log.Println("Error writing message:", err)
+			return
+		}
+	}
+}
+
+func SimpleSocketHandler(c *websocket.Conn) {
+	defer c.Close()
+	for {
+		messageType, msg, err := c.ReadMessage()
+		if err != nil {
+			log.Println("Error reading message:", err)
+			return
+		}
+
+		var message map[string]interface{}
+		if err := json.Unmarshal(msg, &message); err != nil {
+			log.Println("Error unmarshalling JSON:", err)
+			continue
+		}
+
+		if message["num1"] != nil || message["num2"] != nil {
+			num1, _ := message["num1"].(float64)
+			num2, _ := message["num2"].(float64)
+			// if !ok1 || !ok2 {
+			// 	// log.Println("Invalid numbers")
+			// 	// continue
+			// }
+
+			if num1 != 0 && num2 == 0 {
+				num2 = 0
+			}
+
+			if num1 == 0 && num2 != 0 {
+				num1 = 0
+			}
+
+			// fmt.Println(num1, num2)
+
+			result := num1 + num2
+			message["result"] = result
+			message["message"] = "You are performing addition with input: " + fmt.Sprint(strconv.ParseFloat(fmt.Sprint(num1), 64)) + "and " + fmt.Sprint(strconv.ParseFloat(fmt.Sprint(num2), 64))
+		} else {
+			err = c.WriteMessage(messageType, msg)
+			if err != nil {
+				log.Println("Error writing message:", err)
+				return
+			}
+			// if message["str"] != nil {
+			message["result"] = message["str"].(string)
+			// } else {
+			// 	message["result"] = message["num1"].(float64) + message["num2"].(float64)
+			// }
+
+			message["message"] = "Your data is sent, but no operation is performed"
+		}
+
 		response, err := json.Marshal(message)
 		if err != nil {
 			log.Println("Error marshalling JSON:", err)

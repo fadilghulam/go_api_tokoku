@@ -5,6 +5,7 @@ import (
 	db "go_api_tokoku/config"
 	"go_api_tokoku/helpers"
 	model "go_api_tokoku/models"
+	"log"
 	"strconv"
 	"strings"
 
@@ -26,13 +27,14 @@ func InsertCart(c *fiber.Ctx) error {
 	produkId := c.FormValue("produk_id")
 	qty := c.FormValue("qty")
 	storeId := c.FormValue("store_id")
+	harga := c.FormValue("harga")
 
 	result := db.DB.Exec(
 		fmt.Sprintf(
-			`INSERT INTO tk.cart (customer_id, produk_id, qty, date_cart, store_id) 
-				VALUES (%v, %v, %v, CURRENT_DATE, %v)
+			`INSERT INTO tk.cart (customer_id, produk_id, qty, date_cart, store_id, harga) 
+				VALUES (%v, %v, %v, CURRENT_DATE, %v, %v)
 				ON CONFLICT (customer_id, produk_id, date_cart, store_id) 
-				DO UPDATE SET qty = (cart.qty + excluded.qty), updated_at = now()`, customerId, produkId, qty, storeId))
+				DO UPDATE SET qty = (cart.qty + excluded.qty), updated_at = now()`, customerId, produkId, qty, storeId, harga))
 
 	if result.Error != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
@@ -125,7 +127,7 @@ func GetCart(c *fiber.Ctx) error {
 										'code', p.code,
 										'name', p.name,
 										'discount', COALESCE(dis.nominal,0),
-										'harga', rh.harga,
+										'harga', cart.harga,
 										'image', p.foto,
 										'point', COALESCE(pt.value,0),
 										'promo', JSONB_BUILD_OBJECT(
@@ -142,14 +144,14 @@ func GetCart(c *fiber.Ctx) error {
 		ON c.id = %s
 	JOIN salesman s
 		ON c.salesman_id = s.id
-	LEFT JOIN ref_harga_master rhm
-		ON c.branch_id = rhm.branch_id
-	AND CURRENT_DATE BETWEEN rhm.date_start AND COALESCE(rhm.date_end, CURRENT_DATE)
-	LEFT JOIN ref_harga rh
-		ON rhm.id = rh.ref_harga_master_id
-		AND c.tipe = rh.customer_tipe
-		AND s.tipe_salesman = rh.salesman_tipe
-		AND p.id = rh.produk_id
+	--LEFT JOIN ref_harga_master rhm
+	--	ON c.branch_id = rhm.branch_id
+	--AND CURRENT_DATE BETWEEN rhm.date_start AND COALESCE(rhm.date_end, CURRENT_DATE)
+	--LEFT JOIN ref_harga rh
+	--	ON rhm.id = rh.ref_harga_master_id
+	--	AND c.tipe = rh.customer_tipe
+	--	AND s.tipe_salesman = rh.salesman_tipe
+	--	AND p.id = rh.produk_id
 	LEFT JOIN tk.discount dis
 		ON p.id = dis.produk_id
 		AND CURRENT_DATE BETWEEN dis.date_start AND COALESCE(dis.date_end, CURRENT_DATE)
@@ -256,5 +258,76 @@ func DeleteCart(c *fiber.Ctx) error {
 			})
 		}
 	}
+}
 
+func CheckoutCart(c *fiber.Ctx) error {
+	cartIds := c.FormValue("cart_id")
+	prov := c.FormValue("prov")
+	kab := c.FormValue("kab")
+	kec := c.FormValue("kec")
+	kel := c.FormValue("kel")
+	note := c.FormValue("note")
+	sr_id := c.FormValue("sr_id")
+	rayon_id := c.FormValue("rayon_id")
+	branch_id := c.FormValue("branch_id")
+
+	// tempCartIds := strings.Split(cartIds, ",")
+
+	tx := db.DB.Begin()
+
+	// var storeIds []int
+	// var storeIdsStr string
+	getStoreId := fmt.Sprintf(`SELECT store_id, MAX(id) as max_id, string_agg(id||'',',') as ids FROM tk.cart WHERE id IN (%v) GROUP BY store_id`, cartIds)
+
+	// var results [][]interface{}
+	result, err := helpers.ExecuteQuery(getStoreId)
+	if err != nil {
+		tx.Rollback()
+		log.Fatal("failed to get store id: ", err.Error())
+	}
+
+	for i := 0; i < len(result); i++ {
+
+		var transactionID int
+
+		query := fmt.Sprintf(
+			`INSERT INTO tk.transaction (transaction_state_id, customer_id, transaction_date, provinsi, kabupaten, kecamatan, kelurahan, sr_id, rayon_id, branch_id, store_id, note)
+	         SELECT 1, customer_id, NOW(), '%s', '%s', '%s', '%s', '%v', '%v', '%v', %v, '%s'
+	         FROM tk.cart WHERE id = %v
+	         RETURNING id`, prov, kab, kec, kel, sr_id, rayon_id, branch_id, result[i]["store_id"], note, result[i]["max_id"])
+
+		firstInsert := tx.Raw(query).Scan(&transactionID)
+		if firstInsert.Error != nil {
+			tx.Rollback()
+			log.Fatal("failed to insert transaction: ", firstInsert.Error)
+		}
+
+		tempCartIds := strings.Split(result[i]["ids"].(string), ",")
+		// fmt.Println(tempCartIds)
+
+		for j := 0; j < len(tempCartIds); j++ {
+			anotherInsertQuery := fmt.Sprintf(`INSERT INTO tk.transaction_detail (transaction_id, produk_id, qty, harga, diskon, condition, pita, note)
+								SELECT %v, produk_id, qty, harga, 0, null, null, null
+								FROM tk.cart WHERE id = %v`, transactionID, tempCartIds[j])
+
+			fmt.Println(anotherInsertQuery)
+			secondInsert := tx.Exec(anotherInsertQuery)
+			if secondInsert.Error != nil {
+				tx.Rollback()
+				log.Fatal("failed to insert transaction: ", secondInsert.Error)
+			}
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Insert failed",
+			Success: true,
+		})
+	} else {
+		return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
+			Message: "Transaction has been added",
+			Success: true,
+		})
+	}
 }

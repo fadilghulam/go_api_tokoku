@@ -14,6 +14,8 @@ type Cart struct {
 	CreatedAt  time.Time `gorm:"column:created_at;not null;default:now()" json:"created_at"`
 	UpdatedAt  time.Time `gorm:"column:updated_at;not null;default:now()" json:"updated_at"`
 	DateCart   time.Time `gorm:"column:date_cart;not null;default:current_date" json:"date_cart"`
+	StoreId    int64     `gorm:"column:store_id" json:"store_id"`
+	Harga      int64     `gorm:"column:harga" json:"harga"`
 }
 
 func (*Cart) TableName() string {

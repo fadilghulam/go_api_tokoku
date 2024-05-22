@@ -59,6 +59,7 @@ func Setup(app *fiber.App) {
 	webSocketGroup.Get("/echo", websocket.New(controllers.EchoHandler))
 	webSocketGroup.Get("/print", websocket.New(controllers.EchoHandler2))
 	webSocketGroup.Get("/addition", websocket.New(controllers.TestHandler))
+	webSocketGroup.Get("/simpleSocket", websocket.New(controllers.SimpleSocketHandler))
 
 	//authentication routes
 	app.Post("/login", controllers.Login)
@@ -82,6 +83,7 @@ func Setup(app *fiber.App) {
 	authGroup.Get("/cart", controllers.GetCart)
 	authGroup.Put("/updateCart", controllers.UpdateCart)
 	authGroup.Delete("/deleteCart", controllers.DeleteCart)
+	authGroup.Post("/checkoutCart", controllers.CheckoutCart)
 
 	// //reports
 	// app.Get("/revenues", controllers.GetRevenues)
