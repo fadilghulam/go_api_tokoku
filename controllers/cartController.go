@@ -310,13 +310,20 @@ func CheckoutCart(c *fiber.Ctx) error {
 								SELECT %v, produk_id, qty, harga, 0, null, null, null
 								FROM tk.cart WHERE id = %v`, transactionID, tempCartIds[j])
 
-			fmt.Println(anotherInsertQuery)
+			// fmt.Println(anotherInsertQuery)
 			secondInsert := tx.Exec(anotherInsertQuery)
 			if secondInsert.Error != nil {
 				tx.Rollback()
 				log.Fatal("failed to insert transaction: ", secondInsert.Error)
 			}
 		}
+	}
+
+	deleteQuery := fmt.Sprintf("DELETE tk.cart WHERE id IN (%v)", cartIds)
+	deleteProc := tx.Exec(deleteQuery)
+	if deleteProc.Error != nil {
+		tx.Rollback()
+		log.Fatal("failed to delete cart: ", deleteProc.Error)
 	}
 
 	if err := tx.Commit().Error; err != nil {
