@@ -268,8 +268,23 @@ func CheckoutCart(c *fiber.Ctx) error {
 	kel := c.FormValue("kel")
 	note := c.FormValue("note")
 	sr_id := c.FormValue("sr_id")
+	var querySr_id, valueSr_id string
+	if sr_id != "" {
+		querySr_id = ", sr_id"
+		valueSr_id = "," + sr_id
+	}
+	var queryRayon_id, valueRayon_id string
 	rayon_id := c.FormValue("rayon_id")
+	if rayon_id != "" {
+		queryRayon_id = ", rayon_id"
+		valueRayon_id = "," + rayon_id
+	}
+	var queryBranch_id, valueBranch_id string
 	branch_id := c.FormValue("branch_id")
+	if branch_id != "" {
+		queryBranch_id = ", branch_id"
+		valueBranch_id = "," + branch_id
+	}
 
 	// tempCartIds := strings.Split(cartIds, ",")
 
@@ -291,10 +306,12 @@ func CheckoutCart(c *fiber.Ctx) error {
 		var transactionID int
 
 		query := fmt.Sprintf(
-			`INSERT INTO tk.transaction (transaction_state_id, customer_id, transaction_date, provinsi, kabupaten, kecamatan, kelurahan, sr_id, rayon_id, branch_id, store_id, note)
-	         SELECT 1, customer_id, NOW(), '%s', '%s', '%s', '%s', '%v', '%v', '%v', %v, '%s'
+			`INSERT INTO tk.transaction (transaction_state_id, customer_id, transaction_date, provinsi, kabupaten, kecamatan, kelurahan, store_id, note %s %s %s)
+	         SELECT 1, customer_id, NOW(), '%s', '%s', '%s', '%s', %v, '%s' %v %v %v
 	         FROM tk.cart WHERE id = %v
-	         RETURNING id`, prov, kab, kec, kel, sr_id, rayon_id, branch_id, result[i]["store_id"], note, result[i]["max_id"])
+	         RETURNING id`, querySr_id, queryRayon_id, queryBranch_id, prov, kab, kec, kel, result[i]["store_id"], note, valueSr_id, valueRayon_id, valueBranch_id, result[i]["max_id"])
+
+		// fmt.Println(query)
 
 		firstInsert := tx.Raw(query).Scan(&transactionID)
 		if firstInsert.Error != nil {
@@ -319,7 +336,7 @@ func CheckoutCart(c *fiber.Ctx) error {
 		}
 	}
 
-	deleteQuery := fmt.Sprintf("DELETE tk.cart WHERE id IN (%v)", cartIds)
+	deleteQuery := fmt.Sprintf("DELETE FROM tk.cart WHERE id IN (%v)", cartIds)
 	deleteProc := tx.Exec(deleteQuery)
 	if deleteProc.Error != nil {
 		tx.Rollback()
@@ -333,7 +350,7 @@ func CheckoutCart(c *fiber.Ctx) error {
 		})
 	} else {
 		return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
-			Message: "Transaction has been added",
+			Message: "Cart has been processed",
 			Success: true,
 		})
 	}

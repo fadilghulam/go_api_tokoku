@@ -83,6 +83,7 @@ func Setup(app *fiber.App) {
 	authGroup.Get("/cart", controllers.GetCart)
 	authGroup.Put("/updateCart", controllers.UpdateCart)
 	authGroup.Delete("/deleteCart", controllers.DeleteCart)
+	// authGroup.Post("/checkoutCart", controllers.CheckoutCart)
 	authGroup.Post("/checkoutCart", controllers.CheckoutCart)
 
 	// //reports
