@@ -61,41 +61,60 @@ func UpdateCart(c *fiber.Ctx) error {
 	cartId := c.FormValue("cart_id")
 	qty := c.FormValue("qty")
 
-	newQty, _ := strconv.Atoi(qty)
+	newQty, err := strconv.Atoi(qty)
+	if err != nil {
+		log.Println(err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Quantity is not valid",
+			Success: false,
+		})
+	}
+
+	tx := db.DB.Begin()
 
 	var query = ""
 	if newQty != 0 {
 		// query = fmt.Sprintf(
-		// 	`UPDATE tk.cart SET qty += %v, updated_at = now() WHERE id = %v`, newQty, cartId)
+		// 	`UPDATE tk.cart SET qty = %v, updated_at = now() WHERE id = %v`, newQty, cartId)
 
 		query = fmt.Sprintf(`WITH updated AS (
-								UPDATE tk.cart SET qty = %v, updated_at = now() WHERE id IN(%v) RETURNING store_id, customer_id
-							)
-							UPDATE tk.cart
-							SET updated_at = now()
-							FROM(
-								SELECT * FROM updated
-							) data
-							WHERE tk.cart.customer_id = data.customer_id AND tk.cart.store_id = data.store_id`, newQty, cartId)
+									UPDATE tk.cart SET qty = %v, updated_at = now() WHERE id IN(%v) RETURNING store_id, customer_id
+								)
+								UPDATE tk.cart
+								SET updated_at = now()
+								FROM(
+									SELECT * FROM updated
+								) data
+								WHERE tk.cart.customer_id = data.customer_id AND tk.cart.store_id = data.store_id`, newQty, cartId)
+
 	} else {
 		query = fmt.Sprintf(
 			`DELETE FROM tk.cart WHERE id IN(%v)`, cartId)
 	}
 
-	result := db.DB.Exec(query)
+	result := tx.Exec(query)
 
 	if result.Error != nil {
+		tx.Rollback()
+		log.Println(result.Error.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
-			Message: "Update failed",
-			Success: true,
+			Message: "Something went wrong",
+			Success: false,
 		})
 	} else {
 		rowsAffected := result.RowsAffected
 		if rowsAffected > 0 {
-			return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
-				Message: "Cart has been updated",
-				Success: true,
-			})
+			if err := tx.Commit().Error; err != nil {
+				return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+					Message: "Something went wrong",
+					Success: false,
+				})
+			} else {
+				return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
+					Message: "Cart has been updated",
+					Success: true,
+				})
+			}
 		} else {
 			return c.Status(fiber.StatusNotFound).JSON(helpers.ResponseWithoutData{
 				Message: "Update failed",
@@ -251,7 +270,7 @@ func DeleteCart(c *fiber.Ctx) error {
 
 	if result.Error != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
-			Message: result.Error.Error(),
+			Message: "Something went wrong",
 			Success: false,
 		})
 	} else {
@@ -309,7 +328,11 @@ func CheckoutCart(c *fiber.Ctx) error {
 	result, err := helpers.ExecuteQuery(getStoreId)
 	if err != nil {
 		tx.Rollback()
-		log.Fatal("failed to get store id: ", err.Error())
+		log.Println("failed to get store id: ", err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
 	}
 
 	for i := 0; i < len(result); i++ {
@@ -327,7 +350,11 @@ func CheckoutCart(c *fiber.Ctx) error {
 		firstInsert := tx.Raw(query).Scan(&transactionID)
 		if firstInsert.Error != nil {
 			tx.Rollback()
-			log.Fatal("failed to insert transaction: ", firstInsert.Error)
+			log.Println("failed to insert transaction: ", firstInsert.Error.Error())
+			return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+				Message: "Something went wrong",
+				Success: false,
+			})
 		}
 
 		tempCartIds := strings.Split(result[i]["ids"].(string), ",")
@@ -342,7 +369,11 @@ func CheckoutCart(c *fiber.Ctx) error {
 			secondInsert := tx.Exec(anotherInsertQuery)
 			if secondInsert.Error != nil {
 				tx.Rollback()
-				log.Fatal("failed to insert transaction: ", secondInsert.Error)
+				log.Println("failed to insert transaction: ", secondInsert.Error.Error())
+				return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+					Message: "Something went wrong",
+					Success: false,
+				})
 			}
 		}
 	}
@@ -351,13 +382,17 @@ func CheckoutCart(c *fiber.Ctx) error {
 	deleteProc := tx.Exec(deleteQuery)
 	if deleteProc.Error != nil {
 		tx.Rollback()
-		log.Fatal("failed to delete cart: ", deleteProc.Error)
+		log.Println("failed to delete cart: ", deleteProc.Error.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
 	}
 
 	if err := tx.Commit().Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
-			Message: "Insert failed",
-			Success: true,
+			Message: "Something went wrong",
+			Success: false,
 		})
 	} else {
 		return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
