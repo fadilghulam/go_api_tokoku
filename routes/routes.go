@@ -63,6 +63,7 @@ func Setup(app *fiber.App) {
 
 	//authentication routes
 	app.Post("/login", controllers.Login)
+	app.Post("/sendOtp", controllers.SendOtp)
 	app.Post("/loginLegacy", controllers.LoginOrigin)
 
 	authGroup := app.Group("")

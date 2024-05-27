@@ -98,6 +98,8 @@ func Login(c *fiber.Ctx) error {
 	type LoginRequest struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
+		Otp      string `json:"otp"`
+		SendTo   string `json:"sendTo"`
 	}
 	var loginReq LoginRequest
 	if err := c.BodyParser(&loginReq); err != nil {
@@ -110,6 +112,8 @@ func Login(c *fiber.Ctx) error {
 	data := map[string]interface{}{
 		"username": loginReq.Username,
 		"password": fmt.Sprintf("%x", md5.Sum([]byte(loginReq.Password))),
+		"otp":      loginReq.Otp,
+		"sendTo":   loginReq.SendTo,
 		"appName":  "TOKOKU",
 	}
 
@@ -150,6 +154,68 @@ func Login(c *fiber.Ctx) error {
 	}
 
 	return c.Status(resp.StatusCode).JSON(responseData)
+}
+
+func SendOtp(c *fiber.Ctx) error {
+	type OtpRequest struct {
+		Phone string `json:"phone"`
+	}
+	var otpReq OtpRequest
+	if err := c.BodyParser(&otpReq); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request payload"})
+	}
+
+	client := &http.Client{}
+
+	// Data to send in the POST request
+	data := map[string]interface{}{
+		"sendTo":  otpReq.Phone,
+		"appName": "TOKOKU",
+	}
+
+	dataSend, err := json.Marshal(data)
+	if err != nil {
+		fmt.Println("Error marshaling JSON:", err)
+	}
+
+	// Create a POST request with a JSON payload
+	req, err := http.NewRequest("POST", "https://rest.pt-bks.com/olympus/sendOtp", bytes.NewReader(dataSend))
+	if err != nil {
+		log.Fatal("Error creating request:", err)
+		return c.SendStatus(http.StatusInternalServerError)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Send the request
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Fatal("Error sending request:", err)
+		return c.SendStatus(http.StatusInternalServerError)
+	}
+	defer resp.Body.Close()
+
+	// Read the response body
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal("Error reading response:", err)
+	}
+
+	responseData, err := helpers.ByteResponse(responseBody)
+	if err != nil {
+		log.Fatal("Error reading response:", err)
+	}
+
+	// fmt.Println("responseData :", responseData)
+
+	// if len(responseData["data"].(map[string]interface{})) == 0 {
+	// 	responseData["data"] = nil
+	// }
+
+	if responseData["success"] == true {
+		return c.Status(fiber.StatusOK).JSON(responseData)
+	}
+
+	return nil
 }
 
 func LoginGPT(c *fiber.Ctx) error {

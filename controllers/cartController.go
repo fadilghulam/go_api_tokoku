@@ -65,8 +65,18 @@ func UpdateCart(c *fiber.Ctx) error {
 
 	var query = ""
 	if newQty != 0 {
-		query = fmt.Sprintf(
-			`UPDATE tk.cart SET qty = %v, updated_at = now() WHERE id = %v`, newQty, cartId)
+		// query = fmt.Sprintf(
+		// 	`UPDATE tk.cart SET qty += %v, updated_at = now() WHERE id = %v`, newQty, cartId)
+
+		query = fmt.Sprintf(`WITH updated AS (
+								UPDATE tk.cart SET qty = %v, updated_at = now() WHERE id IN(%v) RETURNING store_id, customer_id
+							)
+							UPDATE tk.cart
+							SET updated_at = now()
+							FROM(
+								SELECT * FROM updated
+							) data
+							WHERE tk.cart.customer_id = data.customer_id AND tk.cart.store_id = data.store_id`, newQty, cartId)
 	} else {
 		query = fmt.Sprintf(
 			`DELETE FROM tk.cart WHERE id IN(%v)`, cartId)
@@ -263,6 +273,7 @@ func DeleteCart(c *fiber.Ctx) error {
 func CheckoutCart(c *fiber.Ctx) error {
 	cartIds := c.FormValue("cart_id")
 	prov := c.FormValue("prov")
+	customer_id := c.FormValue("customer_id")
 	kab := c.FormValue("kab")
 	kec := c.FormValue("kec")
 	kel := c.FormValue("kel")
@@ -307,9 +318,9 @@ func CheckoutCart(c *fiber.Ctx) error {
 
 		query := fmt.Sprintf(
 			`INSERT INTO tk.transaction (transaction_state_id, customer_id, transaction_date, provinsi, kabupaten, kecamatan, kelurahan, store_id, note %s %s %s)
-	         SELECT 1, customer_id, NOW(), '%s', '%s', '%s', '%s', %v, '%s' %v %v %v
+	         SELECT 1, %v, NOW(), '%s', '%s', '%s', '%s', %v, '%s' %v %v %v
 	         FROM tk.cart WHERE id = %v
-	         RETURNING id`, querySr_id, queryRayon_id, queryBranch_id, prov, kab, kec, kel, result[i]["store_id"], note, valueSr_id, valueRayon_id, valueBranch_id, result[i]["max_id"])
+	         RETURNING id`, querySr_id, queryRayon_id, queryBranch_id, customer_id, prov, kab, kec, kel, result[i]["store_id"], note, valueSr_id, valueRayon_id, valueBranch_id, result[i]["max_id"])
 
 		// fmt.Println(query)
 
