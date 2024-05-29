@@ -298,6 +298,7 @@ func CheckoutCart(c *fiber.Ctx) error {
 	kel := c.FormValue("kel")
 	note := c.FormValue("note")
 	sr_id := c.FormValue("sr_id")
+	voucher_id := c.FormValue("voucher_id")
 	var querySr_id, valueSr_id string
 	if sr_id != "" {
 		querySr_id = ", sr_id"
@@ -375,6 +376,19 @@ func CheckoutCart(c *fiber.Ctx) error {
 					Success: false,
 				})
 			}
+		}
+	}
+
+	if voucher_id != "" {
+		querySubVoucher := fmt.Sprintf("UPDATE tk.voucher_customer SET amount_left - 1 WHERE voucher_id IN (%s) AND customer_id = %v", voucher_id, customer_id)
+		subtractVoucher := tx.Exec(querySubVoucher)
+		if subtractVoucher.Error != nil {
+			tx.Rollback()
+			log.Println("failed to subtract voucher: ", subtractVoucher.Error.Error())
+			return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+				Message: "Something went wrong",
+				Success: false,
+			})
 		}
 	}
 

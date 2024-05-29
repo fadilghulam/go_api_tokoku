@@ -76,11 +76,12 @@ type Voucher struct {
 	Icon         string     `gorm:"column:icon" json:"icon"`
 	Diskon       float64    `gorm:"column:diskon" json:"diskon"`
 	IsPercentage int32      `gorm:"column:is_percentage" json:"is_percentage"`
-	MinDiskon    float64    `gorm:"column:min_diskon" json:"min_diskon"`
+	MinCost      float64    `gorm:"column:min_diskon" json:"min_cost"`
 	MaxDiskon    float64    `gorm:"column:max_diskon" json:"max_diskon"`
 	CreatedAt    time.Time  `gorm:"column:created_at;not null;default:now()" json:"created_at"`
 	UpdatedAt    time.Time  `gorm:"column:updated_at;not null;default:now()" json:"updated_at"`
 	Note         string     `gorm:"column:note" json:"note"`
+	Amount       int16      `gorm:"column:amount" json:"amount"`
 }
 
 func (*Voucher) TableName() string {

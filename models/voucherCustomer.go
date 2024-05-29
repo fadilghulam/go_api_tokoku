@@ -12,6 +12,7 @@ type VoucherCustomer struct {
 	VoucherId  int64     `gorm:"column:voucher_id" json:"voucherId"`
 	CreatedAt  time.Time `gorm:"column:created_at;not null;default:now()" json:"created_at"`
 	UpdatedAt  time.Time `gorm:"column:updated_at;not null;default:now()" json:"updated_at"`
+	AmountLeft int16     `gorm:"column:amount_left" json:"amount_left"`
 }
 
 func (*VoucherCustomer) TableName() string {

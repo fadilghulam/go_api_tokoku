@@ -6,7 +6,6 @@ import (
 	"go_api_tokoku/helpers"
 	model "go_api_tokoku/models"
 	"log"
-
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -56,9 +55,10 @@ func GetAllVoucher(c *fiber.Ctx) error {
 							v.date_end,
 							v.diskon,
 							v.is_percentage,
-							v.min_diskon,
+							v.min_cost,
 							v.max_diskon,
 							v.note,
+							vc.amount_left,
 							JSONB_AGG(p.id) as product_ids,
 							JSONB_AGG(
 								JSONB_BUILD_OBJECT(
@@ -69,7 +69,7 @@ func GetAllVoucher(c *fiber.Ctx) error {
 									--'date_end', v.date_end,
 									--'diskon', v.diskon,
 									--'is_percentage', v.is_percentage,
-									--'min_diskon', v.min_diskon,
+									--'min_cost', v.min_cost,
 									--'max_diskon', v.max_diskon,
 									--'note', v.note,
 									'id', p.id,
@@ -149,6 +149,7 @@ func InsertVoucherCustomer(c *fiber.Ctx) error {
 		}
 		voucherCustomer.CustomerId = customerId
 		voucherCustomer.VoucherId = voucher.ID
+		voucherCustomer.AmountLeft = voucher.Amount
 	}
 
 	tx.Where("customer_id = ? AND voucher_id = ?", voucherCustomer.CustomerId, voucherCustomer.VoucherId).Find(&voucherCustomer)
@@ -169,10 +170,12 @@ func InsertVoucherCustomer(c *fiber.Ctx) error {
 			Success: false,
 		})
 	} else {
+		voucherAdded, _ := helpers.ExecuteQuery(fmt.Sprintf("SELECT * FROM tk.voucher WHERE id = %v", voucherCustomer.VoucherId))
 		tx.Commit()
-		return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
+		return c.Status(fiber.StatusOK).JSON(helpers.Response{
 			Message: "Voucher has been added",
 			Success: true,
+			Data:    voucherAdded[0],
 		})
 	}
 }
