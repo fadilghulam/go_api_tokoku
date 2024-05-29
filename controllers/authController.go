@@ -112,9 +112,12 @@ func Login(c *fiber.Ctx) error {
 	data := map[string]interface{}{
 		"username": loginReq.Username,
 		"password": fmt.Sprintf("%x", md5.Sum([]byte(loginReq.Password))),
-		"otp":      loginReq.Otp,
-		"sendTo":   loginReq.SendTo,
 		"appName":  "TOKOKU",
+	}
+
+	if loginReq.Otp != "" {
+		data["otp"] = loginReq.Otp
+		data["sendTo"] = loginReq.SendTo
 	}
 
 	dataSend, err := json.Marshal(data)
@@ -149,9 +152,17 @@ func Login(c *fiber.Ctx) error {
 		log.Fatal("Error reading response:", err)
 	}
 
+	// switch responseData["data"].(type) {
+	// case map[string]interface{}:
 	if len(responseData["data"].(map[string]interface{})) == 0 {
 		responseData["data"] = nil
 	}
+	// case []interface{}:
+	// 	if len(responseData["data"].([]interface{})) == 0 {
+	// 		responseData["data"] = nil
+	// 	}
+
+	// }
 
 	return c.Status(resp.StatusCode).JSON(responseData)
 }
