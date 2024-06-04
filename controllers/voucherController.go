@@ -59,7 +59,8 @@ func GetAllVoucher(c *fiber.Ctx) error {
 							v.max_diskon,
 							v.note,
 							vc.amount_left,
-							JSONB_AGG(p.id) as product_ids,
+							-- JSONB_AGG(DISTINCT CASE WHEN -1 = ANY(v.produk_id) THEN null ELSE p.id END) as product_ids,
+							CASE WHEN -1 = ANY(v.produk_id) THEN null ELSE JSONB_AGG(p.id) END as product_ids,
 							JSONB_AGG(
 								JSONB_BUILD_OBJECT(
 									--'id', v.id,

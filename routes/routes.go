@@ -7,7 +7,6 @@ import (
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/websocket/v2"
 )
 
 func AuthMiddleware(c *fiber.Ctx) error {
@@ -52,15 +51,6 @@ func Setup(app *fiber.App) {
 		return c.SendString("Landing Page 3!")
 	})
 
-	webSocketGroup := app.Group("ws")
-	webSocketGroup.Get("/", func(c *fiber.Ctx) error {
-		return c.SendFile("views/websockets.html")
-	})
-	webSocketGroup.Get("/echo", websocket.New(controllers.EchoHandler))
-	webSocketGroup.Get("/print", websocket.New(controllers.EchoHandler2))
-	webSocketGroup.Get("/addition", websocket.New(controllers.TestHandler))
-	webSocketGroup.Get("/simpleSocket", websocket.New(controllers.SimpleSocketHandler))
-
 	//authentication routes
 	app.Post("/login", controllers.Login)
 	app.Post("/sendOtp", controllers.SendOtp)
@@ -84,13 +74,19 @@ func Setup(app *fiber.App) {
 	authGroup.Get("/cart", controllers.GetCart)
 	authGroup.Put("/updateCart", controllers.UpdateCart)
 	authGroup.Delete("/deleteCart", controllers.DeleteCart)
-	// authGroup.Post("/checkoutCart", controllers.CheckoutCart)
 	authGroup.Post("/checkoutCart", controllers.CheckoutCart)
 
 	//Voucher routes
 	authGroup.Post("/addVoucher", controllers.InsertVoucher)
 	authGroup.Get("/getVoucher", controllers.GetAllVoucher)
 	authGroup.Post("/addVoucherCustomer", controllers.InsertVoucherCustomer)
+
+	//Item routes
+	authGroup.Post("/insertExchange", controllers.InsertCartItem)
+	authGroup.Get("/getCartItem", controllers.GetCartItem)
+	authGroup.Put("/updateCartItem", controllers.UpdateCartItem)
+	authGroup.Delete("/deleteCartItem", controllers.DeleteCartItem)
+	authGroup.Get("/itemExchange", controllers.GetItemsExchange)
 
 	// //reports
 	// app.Get("/revenues", controllers.GetRevenues)
