@@ -28,7 +28,13 @@ func GetTransactions(c *fiber.Ctx) error {
 						'qty', trd.qty,
 						'unit', iu.name,
 						'harga', trd.harga,
-						'note', trd.note
+						'note', trd.note,
+						'produk_satuan', JSONB_BUILD_OBJECT(
+											'carton', ps.carton,
+											'ball', ps.ball,
+											'slof', ps.slof,
+											'pack', ps.pack
+										)
 					) ORDER BY p.order
 				) as details,
 				JSONB_BUILD_OBJECT(
@@ -50,15 +56,17 @@ func GetTransactions(c *fiber.Ctx) error {
 				) as customer,
 				JSONB_BUILD_OBJECT(
 					'no_transaksi', tr.id,
-					'jumlah_pesanan', JSONB_BUILD_OBJECT(
-										'pack', CASE WHEN MOD(SUM(trd.qty),10) > 0 THEN MOD(SUM(trd.qty),10) ELSE 0 END::integer,
-										'slof', CASE WHEN MOD(SUM(trd.qty),800) >= 10 THEN (MOD(SUM(trd.qty), 800) / 10) ELSE 0 END::integer,
-										'box', CASE WHEN SUM(trd.qty) >= 800 THEN (SUM(trd.qty) / 800) ELSE 0 END::integer
-									),
+					'jumlah_pesanan', SUM(trd.qty),
 					'jumlah_point', SUM(trd.point),
 					'voucher_tokoku', 0,
 					'total_pembayaran', tr.total_transaction
-				) as invoice
+				) as invoice,
+				rev.rating,
+				JSONB_BUILD_OBJECT(
+					'rating', rev.rating,
+					'description', rev.description,
+					'photo', rev.photo
+				) as review
 			FROM tk.transaction_detail trd
 			JOIN tk.transaction tr
 				ON trd.transaction_id = tr.id
@@ -68,6 +76,8 @@ func GetTransactions(c *fiber.Ctx) error {
 				ON tr.customer_id = c.id
 			JOIN produk p
 				ON trd.produk_id = p.id
+			JOIN produk_satuan ps
+				ON p.satuan_id = ps.id
 			LEFT JOIN tk.unit_mapping um
 				ON p.id = um.produk_id
 			LEFT JOIN tk.item_unit_tk iu
@@ -75,8 +85,11 @@ func GetTransactions(c *fiber.Ctx) error {
 			LEFT JOIN salesman s
 				ON (tr.reference_id = s.id
 				AND tr.reference_name = 'SALESMAN')
+			LEFT JOIN tk.review rev
+				ON tr.id = rev.order_id
+				AND rev.order_item_id IS NULL
 			WHERE tr.customer_id = %s AND ts.name = UPPER('%s')
-			GROUP BY trd.transaction_id, tr.id, c.id, s.id
+			GROUP BY trd.transaction_id, tr.id, c.id, s.id, rev.id
 		)
 		
 		SELECT LOWER(name) as name,
@@ -90,8 +103,9 @@ func GetTransactions(c *fiber.Ctx) error {
 						'courier', trd.courier,
 						'customer', trd.customer,
 						'invoice', trd.invoice,
-						'note', tr.note
-					) ORDER BY tr.transaction_date
+						'note', tr.note,
+						'review', CASE WHEN trd.rating IS NULL THEN NULL ELSE trd.review END
+					) ORDER BY tr.transaction_date DESC
 				) FILTER (WHERE tr.id IS NOT NULL) as datas
 		FROM tk.transaction_state ts
 		LEFT JOIN tk.transaction tr

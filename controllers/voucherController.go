@@ -75,7 +75,13 @@ func GetAllVoucher(c *fiber.Ctx) error {
 									--'note', v.note,
 									'id', p.id,
 									'name', p.name,
-									'code', p.code
+									'code', p.code,
+									'produk_satuan', JSONB_BUILD_OBJECT(
+														'carton', ps.carton,
+														'ball', ps.ball,
+														'slof', ps.slof,
+														'pack', ps.pack
+													)
 								) ORDER BY p.order 
 							) as products
 					FROM tk.voucher_customer vc
@@ -84,6 +90,8 @@ func GetAllVoucher(c *fiber.Ctx) error {
 					JOIN produk p
 						ON CASE WHEN -1 = ANY(v.produk_id) THEN TRUE ELSE p.id = ANY(v.produk_id) END
 						AND p.is_aktif = 1
+					JOIN produk_satuan ps
+						ON p.satuan_id = ps.id
 					WHERE now() BETWEEN v.date_start AND COALESCE(v.date_end, now()) AND vc.customer_id = %s
 					GROUP BY vc.id, v.id
 					ORDER BY v.date_end`, customerId))

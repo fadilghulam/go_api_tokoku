@@ -28,16 +28,24 @@ func GetProdukTerkini(c *fiber.Ctx) error {
 				-- rh.diskon as discount
 				-- CASE WHEN MOD(ROW_NUMBER() OVER(ORDER BY p.order), 2) > 0 THEN 10 ELSE 0 END as discount
 				COALESCE(pt.value, 0) as point,
-				COALESCE(dis.nominal,0) as discount
+				COALESCE(dis.nominal,0) as discount,
+				JSONB_BUILD_OBJECT(
+					'carton', ps.carton,
+					'ball', ps.ball,
+					'slof', ps.slof,
+					'pack', ps.pack
+				) as produk_satuan
 			FROM customer c
-			JOIN produk_branch pb
-				ON c.branch_id = pb.branch_id
-			JOIN produk p
-				ON pb.produk_id = p.id
 			JOIN salesman s
 				ON c.salesman_id = s.id
+			JOIN produk_branch pb
+				ON COALESCE(c.branch_id,s.branch_id) = pb.branch_id
+			JOIN produk p
+				ON pb.produk_id = p.id
+			JOIN produk_satuan ps
+				ON p.satuan_id = ps.id
 			LEFT JOIN ref_harga_master rhm
-				ON c.branch_id = rhm.branch_id
+				ON COALESCE(c.branch_id,s.branch_id) = rhm.branch_id
 				AND CURRENT_DATE BETWEEN rhm.date_start AND COALESCE(rhm.date_end, CURRENT_DATE)
 			LEFT JOIN ref_harga rh
 				ON rhm.id = rh.ref_harga_master_id
@@ -47,12 +55,12 @@ func GetProdukTerkini(c *fiber.Ctx) error {
 			LEFT JOIN tk.discount dis
 				ON p.id = dis.produk_id
 				AND CURRENT_DATE BETWEEN dis.date_start AND COALESCE(dis.date_end, CURRENT_DATE)
-				AND c.branch_id = dis.branch_id
+				AND COALESCE(c.branch_id,s.branch_id) = dis.branch_id
 				AND c.tipe = dis.customer_type_id
 			LEFT JOIN tk.points pt
 				ON p.id = pt.produk_id
 				AND CURRENT_DATE BETWEEN pt.date_start AND COALESCE(pt.date_end, CURRENT_DATE)
-				AND c.branch_id = pt.branch_id
+				AND COALESCE(c.branch_id,s.branch_id) = pt.branch_id
 			WHERE c.id = %s
 			ORDER BY p.order`, customerId))
 
@@ -90,16 +98,24 @@ func GetProdukDetail(c *fiber.Ctx) error {
 				rh.harga,
 				COALESCE(dis.nominal,0) as discount,
 				COALESCE(pt.value,0) as point,
-				0 as stock
+				0 as stock,
+				JSONB_BUILD_OBJECT(
+					'carton', ps.carton,
+					'ball', ps.ball,
+					'slof', ps.slof,
+					'pack', ps.pack
+				) as produk_satuan
 		FROM produk p
 		JOIN produk_kategori pk
 			ON p.kategori_id = pk.id
+		JOIN produk_satuan ps
+			ON p.satuan_id = ps.id
 		JOIN customer c
 			ON c.id = %s
 		JOIN salesman s
 			ON c.salesman_id = s.id
 		LEFT JOIN ref_harga_master rhm
-			ON c.branch_id = rhm.branch_id
+			ON COALESCE(c.branch_id,s.branch_id) = rhm.branch_id
 			AND CURRENT_DATE BETWEEN rhm.date_start AND COALESCE(rhm.date_end, CURRENT_DATE)
 		LEFT JOIN ref_harga rh
 			ON rhm.id = rh.ref_harga_master_id
@@ -109,12 +125,12 @@ func GetProdukDetail(c *fiber.Ctx) error {
 		LEFT JOIN tk.discount dis
 			ON p.id = dis.produk_id
 			AND CURRENT_DATE BETWEEN dis.date_start AND COALESCE(dis.date_end, CURRENT_DATE)
-			AND c.branch_id = dis.branch_id
+			AND COALESCE(c.branch_id,s.branch_id) = dis.branch_id
 			AND c.tipe = dis.customer_type_id
 		LEFT JOIN tk.points pt
 			ON p.id = pt.produk_id
 			AND CURRENT_DATE BETWEEN pt.date_start AND COALESCE(pt.date_end, CURRENT_DATE)
-			AND c.branch_id = pt.branch_id
+			AND COALESCE(c.branch_id,s.branch_id) = pt.branch_id
 		WHERE p.id = %s`, customerId, produkId))
 
 	if err != nil {

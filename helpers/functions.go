@@ -471,3 +471,14 @@ func PostBody(body []byte) (map[string]interface{}, error) {
 
 	return data, nil
 }
+
+func ConvertStringToInt64(i string) int64 {
+
+	temp, _ := strconv.Atoi(i)
+	temp2 := int64(temp)
+	return temp2
+}
+func FloatToString(input_num float64) string {
+	// to convert a float number to a string
+	return strconv.FormatFloat(input_num, 'f', 6, 64)
+}

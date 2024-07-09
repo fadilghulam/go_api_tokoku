@@ -8,6 +8,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -72,54 +73,109 @@ func UpdateCart(c *fiber.Ctx) error {
 
 	tx := db.DB.Begin()
 
+	newQty64 := int64(newQty)
 	var query = ""
-	if newQty != 0 {
-		// query = fmt.Sprintf(
-		// 	`UPDATE tk.cart SET qty = %v, updated_at = now() WHERE id = %v`, newQty, cartId)
+	if newQty64 != 0 {
+		var cart model.Cart
 
-		query = fmt.Sprintf(`WITH updated AS (
-									UPDATE tk.cart SET qty = %v, updated_at = now() WHERE id IN(%v) RETURNING store_id, customer_id
-								)
-								UPDATE tk.cart
-								SET updated_at = now()
-								FROM(
-									SELECT * FROM updated
-								) data
-								WHERE tk.cart.customer_id = data.customer_id AND tk.cart.store_id = data.store_id`, newQty, cartId)
+		result := tx.Model(&model.Cart{}).Where("id IN (?)", cartId).Updates(model.Cart{Qty: newQty64, UpdatedAt: time.Now()})
+		if result.Error != nil {
+			tx.Rollback()
+			log.Println(result.Error.Error())
+			return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+				Message: "Something went wrong",
+				Success: false,
+			})
+		}
+
+		// Fetch store_id and customer_id from the updated record
+		if err := tx.Model(&model.Cart{}).Select("store_id, customer_id").First(&cart, "id IN (?)", cartId).Error; err != nil {
+			tx.Rollback()
+			log.Println(result.Error.Error())
+			return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+				Message: "Something went wrong",
+				Success: false,
+			})
+		}
+
+		storeID := cart.StoreId
+		customerID := cart.CustomerId
+
+		// Execute the second update query within the new transaction
+		query2 := fmt.Sprintf(`UPDATE tk.cart SET updated_at = now() WHERE store_id = %v AND customer_id = %v`, storeID, customerID)
+		if err := tx.Exec(query2).Error; err != nil {
+			tx.Rollback()
+			log.Println(result.Error.Error())
+			return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+				Message: "Something went wrong",
+				Success: false,
+			})
+		}
+
+		// Handle store_id and customer_id
+
+		if result.Error != nil {
+			tx.Rollback()
+			log.Println(result.Error.Error())
+			return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+				Message: "Something went wrong",
+				Success: false,
+			})
+		} else {
+			rowsAffected := result.RowsAffected
+			if rowsAffected > 0 {
+				if err := tx.Commit().Error; err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+						Message: "Something went wrong",
+						Success: false,
+					})
+				} else {
+					return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
+						Message: "Cart has been updated",
+						Success: true,
+					})
+				}
+			} else {
+				return c.Status(fiber.StatusNotFound).JSON(helpers.ResponseWithoutData{
+					Message: "Update failed",
+					Success: true,
+				})
+			}
+		}
 
 	} else {
 		query = fmt.Sprintf(
 			`DELETE FROM tk.cart WHERE id IN(%v)`, cartId)
-	}
 
-	result := tx.Exec(query)
+		result := tx.Exec(query)
 
-	if result.Error != nil {
-		tx.Rollback()
-		log.Println(result.Error.Error())
-		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
-			Message: "Something went wrong",
-			Success: false,
-		})
-	} else {
-		rowsAffected := result.RowsAffected
-		if rowsAffected > 0 {
-			if err := tx.Commit().Error; err != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
-					Message: "Something went wrong",
-					Success: false,
-				})
+		if result.Error != nil {
+			tx.Rollback()
+			log.Println(result.Error.Error())
+			return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+				Message: "Something went wrong",
+				Success: false,
+			})
+		} else {
+			rowsAffected := result.RowsAffected
+			if rowsAffected > 0 {
+				if err := tx.Commit().Error; err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+						Message: "Something went wrong",
+						Success: false,
+					})
+				} else {
+					return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
+						Message: "Cart has been updated",
+						Success: true,
+					})
+				}
 			} else {
-				return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
-					Message: "Cart has been updated",
+				return c.Status(fiber.StatusNotFound).JSON(helpers.ResponseWithoutData{
+					Message: "Update failed",
 					Success: true,
 				})
 			}
-		} else {
-			return c.Status(fiber.StatusNotFound).JSON(helpers.ResponseWithoutData{
-				Message: "Update failed",
-				Success: true,
-			})
 		}
 	}
 }
@@ -162,15 +218,24 @@ func GetCart(c *fiber.Ctx) error {
 										'promo', JSONB_BUILD_OBJECT(
 													'id', 1,
 													'name', 'Promo 123'
-												)
+												),
+										'produk_satuan', JSONB_BUILD_OBJECT(
+											'carton', ps.carton,
+											'ball', ps.ball,
+											'slof', ps.slof,
+											'pack', ps.pack
+										)
 									)
 					) ORDER BY cart.id DESC
 				) as items
 	FROM tk.cart cart
 	JOIN produk p
 		ON cart.produk_id = p.id
+	JOIN produk_satuan ps
+		ON p.satuan_id = ps.id
 	JOIN customer c
 		ON c.id = %s
+		AND cart.customer_id = c.id
 	JOIN salesman s
 		ON c.salesman_id = s.id
 	--LEFT JOIN ref_harga_master rhm
@@ -195,7 +260,7 @@ func GetCart(c *fiber.Ctx) error {
 
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseDataMultiple{
-			Message: err.Error(),
+			Message: "Something went wrong",
 			Success: false,
 			Data:    nil,
 		})
@@ -289,6 +354,133 @@ func DeleteCart(c *fiber.Ctx) error {
 	}
 }
 
+// func CheckoutCart(c *fiber.Ctx) error {
+// 	cartIds := c.FormValue("cart_id")
+// 	prov := c.FormValue("prov")
+// 	customer_id := c.FormValue("customer_id")
+// 	kab := c.FormValue("kab")
+// 	kec := c.FormValue("kec")
+// 	kel := c.FormValue("kel")
+// 	note := c.FormValue("note")
+// 	sr_id := c.FormValue("sr_id")
+// 	voucher_id := c.FormValue("voucher_id")
+// 	var querySr_id, valueSr_id string
+// 	if sr_id != "" {
+// 		querySr_id = ", sr_id"
+// 		valueSr_id = "," + sr_id
+// 	}
+// 	var queryRayon_id, valueRayon_id string
+// 	rayon_id := c.FormValue("rayon_id")
+// 	if rayon_id != "" {
+// 		queryRayon_id = ", rayon_id"
+// 		valueRayon_id = "," + rayon_id
+// 	}
+// 	var queryBranch_id, valueBranch_id string
+// 	branch_id := c.FormValue("branch_id")
+// 	if branch_id != "" {
+// 		queryBranch_id = ", branch_id"
+// 		valueBranch_id = "," + branch_id
+// 	}
+
+// 	// tempCartIds := strings.Split(cartIds, ",")
+
+// 	tx := db.DB.Begin()
+
+// 	// var storeIds []int
+// 	// var storeIdsStr string
+// 	getStoreId := fmt.Sprintf(`SELECT store_id, MAX(id) as max_id, string_agg(id||'',',') as ids FROM tk.cart WHERE id IN (%v) GROUP BY store_id`, cartIds)
+
+// 	// var results [][]interface{}
+// 	result, err := helpers.ExecuteQuery(getStoreId)
+// 	if err != nil {
+// 		tx.Rollback()
+// 		log.Println("failed to get store id: ", err.Error())
+// 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+// 			Message: "Something went wrong",
+// 			Success: false,
+// 		})
+// 	}
+
+// 	for i := 0; i < len(result); i++ {
+
+// 		var transactionID int
+
+// 		query := fmt.Sprintf(
+// 			`INSERT INTO tk.transaction (transaction_state_id, customer_id, transaction_date, provinsi, kabupaten, kecamatan, kelurahan, store_id, note %s %s %s)
+// 	         SELECT 1, %v, NOW(), '%s', '%s', '%s', '%s', %v, '%s' %v %v %v
+// 	         FROM tk.cart WHERE id = %v
+// 	         RETURNING id`, querySr_id, queryRayon_id, queryBranch_id, customer_id, prov, kab, kec, kel, result[i]["store_id"], note, valueSr_id, valueRayon_id, valueBranch_id, result[i]["max_id"])
+
+// 		// fmt.Println(query)
+
+// 		firstInsert := tx.Raw(query).Scan(&transactionID)
+// 		if firstInsert.Error != nil {
+// 			tx.Rollback()
+// 			log.Println("failed to insert transaction: ", firstInsert.Error.Error())
+// 			return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+// 				Message: "Something went wrong",
+// 				Success: false,
+// 			})
+// 		}
+
+// 		tempCartIds := strings.Split(result[i]["ids"].(string), ",")
+// 		// fmt.Println(tempCartIds)
+
+// 		for j := 0; j < len(tempCartIds); j++ {
+// 			anotherInsertQuery := fmt.Sprintf(`INSERT INTO tk.transaction_detail (transaction_id, produk_id, qty, harga, diskon, condition, pita, note)
+// 								SELECT %v, produk_id, qty, harga, 0, null, null, null
+// 								FROM tk.cart WHERE id = %v`, transactionID, tempCartIds[j])
+
+// 			// fmt.Println(anotherInsertQuery)
+// 			secondInsert := tx.Exec(anotherInsertQuery)
+// 			if secondInsert.Error != nil {
+// 				tx.Rollback()
+// 				log.Println("failed to insert transaction: ", secondInsert.Error.Error())
+// 				return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+// 					Message: "Something went wrong",
+// 					Success: false,
+// 				})
+// 			}
+// 		}
+// 	}
+
+// 	if voucher_id != "" {
+// 		querySubVoucher := fmt.Sprintf("UPDATE tk.voucher_customer SET amount_left = amount_left - 1 WHERE voucher_id IN (%s) AND customer_id = %v", voucher_id, customer_id)
+// 		subtractVoucher := tx.Exec(querySubVoucher)
+// 		if subtractVoucher.Error != nil {
+// 			tx.Rollback()
+// 			log.Println("failed to subtract voucher: ", subtractVoucher.Error.Error())
+// 			return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+// 				Message: "Something went wrong",
+// 				Success: false,
+// 			})
+// 		}
+// 	}
+
+// 	deleteQuery := fmt.Sprintf("DELETE FROM tk.cart WHERE id IN (%v)", cartIds)
+// 	deleteProc := tx.Exec(deleteQuery)
+// 	if deleteProc.Error != nil {
+// 		tx.Rollback()
+// 		log.Println("failed to delete cart: ", deleteProc.Error.Error())
+// 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+// 			Message: "Something went wrong",
+// 			Success: false,
+// 		})
+// 	}
+
+// 	if err := tx.Commit().Error; err != nil {
+// 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+// 			Message: "Something went wrong",
+// 			Success: false,
+// 		})
+// 	} else {
+// 		return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
+// 			Message: "Cart has been processed",
+// 			Success: true,
+// 		})
+// 	}
+// }
+
 func CheckoutCart(c *fiber.Ctx) error {
 	cartIds := c.FormValue("cart_id")
 	prov := c.FormValue("prov")
@@ -299,33 +491,13 @@ func CheckoutCart(c *fiber.Ctx) error {
 	note := c.FormValue("note")
 	sr_id := c.FormValue("sr_id")
 	voucher_id := c.FormValue("voucher_id")
-	var querySr_id, valueSr_id string
-	if sr_id != "" {
-		querySr_id = ", sr_id"
-		valueSr_id = "," + sr_id
-	}
-	var queryRayon_id, valueRayon_id string
 	rayon_id := c.FormValue("rayon_id")
-	if rayon_id != "" {
-		queryRayon_id = ", rayon_id"
-		valueRayon_id = "," + rayon_id
-	}
-	var queryBranch_id, valueBranch_id string
 	branch_id := c.FormValue("branch_id")
-	if branch_id != "" {
-		queryBranch_id = ", branch_id"
-		valueBranch_id = "," + branch_id
-	}
-
-	// tempCartIds := strings.Split(cartIds, ",")
 
 	tx := db.DB.Begin()
 
-	// var storeIds []int
-	// var storeIdsStr string
-	getStoreId := fmt.Sprintf(`SELECT store_id, MAX(id) as max_id, string_agg(id||'',',') as ids FROM tk.cart WHERE id IN (%v) GROUP BY store_id`, cartIds)
+	getStoreId := fmt.Sprintf(`SELECT store_id||'' as store_id, MAX(id) as max_id, string_agg(id||'',',') as ids FROM tk.cart WHERE id IN (%v) GROUP BY store_id`, cartIds)
 
-	// var results [][]interface{}
 	result, err := helpers.ExecuteQuery(getStoreId)
 	if err != nil {
 		tx.Rollback()
@@ -340,33 +512,47 @@ func CheckoutCart(c *fiber.Ctx) error {
 
 		var transactionID int
 
-		query := fmt.Sprintf(
-			`INSERT INTO tk.transaction (transaction_state_id, customer_id, transaction_date, provinsi, kabupaten, kecamatan, kelurahan, store_id, note %s %s %s)
-	         SELECT 1, %v, NOW(), '%s', '%s', '%s', '%s', %v, '%s' %v %v %v
-	         FROM tk.cart WHERE id = %v
-	         RETURNING id`, querySr_id, queryRayon_id, queryBranch_id, customer_id, prov, kab, kec, kel, result[i]["store_id"], note, valueSr_id, valueRayon_id, valueBranch_id, result[i]["max_id"])
+		transaction := model.TkTransaction{
+			TransactionStateID: 1,
+			CustomerID:         helpers.ConvertStringToInt64(customer_id),
+			TransactionDate:    time.Now(),
+			Provinsi:           prov,
+			Kabupaten:          kab,
+			Kecamatan:          kec,
+			StoreID:            helpers.ConvertStringToInt64(result[i]["store_id"].(string)),
+			Note:               note,
+			Kelurahan:          kel,
+			// StoreID:            result[i]["store_id"].(int64),
+		}
 
-		// fmt.Println(query)
+		if sr_id != "" {
+			transaction.SrID = helpers.ConvertStringToInt64(sr_id)
+		}
+		if rayon_id != "" {
+			transaction.RayonID = helpers.ConvertStringToInt64(rayon_id)
+		}
+		if branch_id != "" {
+			transaction.BranchID = helpers.ConvertStringToInt64(branch_id)
+		}
 
-		firstInsert := tx.Raw(query).Scan(&transactionID)
-		if firstInsert.Error != nil {
+		if err := tx.Create(&transaction).Error; err != nil {
 			tx.Rollback()
-			log.Println("failed to insert transaction: ", firstInsert.Error.Error())
+			log.Println("failed to insert transaction: ", err.Error())
 			return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 				Message: "Something went wrong",
 				Success: false,
 			})
 		}
 
+		transactionID = transaction.ID
+
 		tempCartIds := strings.Split(result[i]["ids"].(string), ",")
-		// fmt.Println(tempCartIds)
 
 		for j := 0; j < len(tempCartIds); j++ {
 			anotherInsertQuery := fmt.Sprintf(`INSERT INTO tk.transaction_detail (transaction_id, produk_id, qty, harga, diskon, condition, pita, note)
 								SELECT %v, produk_id, qty, harga, 0, null, null, null
 								FROM tk.cart WHERE id = %v`, transactionID, tempCartIds[j])
 
-			// fmt.Println(anotherInsertQuery)
 			secondInsert := tx.Exec(anotherInsertQuery)
 			if secondInsert.Error != nil {
 				tx.Rollback()
@@ -380,7 +566,7 @@ func CheckoutCart(c *fiber.Ctx) error {
 	}
 
 	if voucher_id != "" {
-		querySubVoucher := fmt.Sprintf("UPDATE tk.voucher_customer SET amount_left - 1 WHERE voucher_id IN (%s) AND customer_id = %v", voucher_id, customer_id)
+		querySubVoucher := fmt.Sprintf("UPDATE tk.voucher_customer SET amount_left = amount_left - 1 WHERE voucher_id IN (%s) AND customer_id = %v", voucher_id, customer_id)
 		subtractVoucher := tx.Exec(querySubVoucher)
 		if subtractVoucher.Error != nil {
 			tx.Rollback()

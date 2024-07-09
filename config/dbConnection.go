@@ -3,6 +3,8 @@ package db
 import (
 	// "devecode_app/models"
 	"fmt"
+	"log"
+
 	// "go_sales_api/models"
 	"os"
 
@@ -58,6 +60,14 @@ func Connect() {
 	//	log.Fatalf("Migration failed %v", err)
 	//}
 
+}
+
+func InitOauth() {
+
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
 }
 
 func GenerateStruct(db *gorm.DB) *gorm.DB {

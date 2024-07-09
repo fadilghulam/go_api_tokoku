@@ -8,8 +8,15 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"time"
 
 	"go_api_tokoku/helpers"
+
+	"github.com/dgrijalva/jwt-go"
+	"github.com/joho/godotenv"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -25,6 +32,30 @@ type ResponseData struct {
 	Message string                 `json:"message"`
 	Data    map[string]interface{} `json:"data"`
 	Jwt     map[string]interface{} `json:"jwt"`
+}
+
+func createJWT(userID string) (string, error) {
+
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	claims := jwt.MapClaims{
+		"id":  userID,
+		"exp": time.Now().Add(time.Hour * 72).Unix(),
+	}
+
+	secretKey := []byte(os.Getenv("JWTKEY"))
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	result, err := token.SignedString(secretKey)
+
+	if err != nil {
+		// return "", err
+		fmt.Println("Error:", err.Error())
+	}
+	return result, nil
 }
 
 func LoginOrigin(c *fiber.Ctx) error {
@@ -278,4 +309,91 @@ func LoginGPT(c *fiber.Ctx) error {
 	}
 
 	return c.Status(resp.StatusCode).JSON(responseData)
+}
+
+func Auth(c *fiber.Ctx) error {
+
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	// Get environment variables
+	oauthClientID := os.Getenv("OAUTH_CLIENT_ID")
+	oauthClientSecret := os.Getenv("OAUTH_CLIENT_SECRET")
+
+	// fmt.Println("oauthClientID: ", oauthClientID)
+
+	if oauthClientID == "" || oauthClientSecret == "" {
+		log.Fatal("Missing OAuth credentials")
+	}
+
+	var oauth2Config = &oauth2.Config{
+		ClientID:     oauthClientID,
+		ClientSecret: oauthClientSecret,
+		RedirectURL:  "http://localhost:4001/oauth/callback",
+		Scopes:       []string{"profile", "email"},
+		Endpoint:     google.Endpoint,
+	}
+
+	url := oauth2Config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
+	return c.Redirect(url)
+}
+
+func OAuthCallback(c *fiber.Ctx) error {
+	code := c.Query("code")
+	if code == "" {
+		return c.Status(http.StatusBadRequest).SendString("Missing code")
+	}
+
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	// Get environment variables
+	oauthClientID := os.Getenv("OAUTH_CLIENT_ID")
+	oauthClientSecret := os.Getenv("OAUTH_CLIENT_SECRET")
+
+	// fmt.Println("oauthClientID: ", oauthClientID)
+
+	if oauthClientID == "" || oauthClientSecret == "" {
+		log.Fatal("Missing OAuth credentials")
+	}
+
+	var oauth2Config = &oauth2.Config{
+		ClientID:     oauthClientID,
+		ClientSecret: oauthClientSecret,
+		RedirectURL:  "http://localhost:4001/oauth/callback",
+		Scopes:       []string{"profile", "email"},
+		Endpoint:     google.Endpoint,
+	}
+
+	token, err := oauth2Config.Exchange(c.Context(), code)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).SendString("Failed to exchange token")
+	}
+
+	client := oauth2Config.Client(c.Context(), token)
+	userInfo, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).SendString("Failed to get user info")
+	}
+
+	// Parse user info
+	var user map[string]interface{}
+	if err := json.NewDecoder(userInfo.Body).Decode(&user); err != nil {
+		return c.Status(http.StatusInternalServerError).SendString("Failed to parse user info")
+	}
+
+	// Generate JWT
+	fmt.Println(user)
+	username := user["email"].(string)
+	tokenString, err := createJWT(username)
+	if err != nil {
+		fmt.Println("Error:", err.Error())
+		return c.Status(http.StatusInternalServerError).SendString("Could not generate token")
+	}
+
+	return c.JSON(fiber.Map{"token": tokenString})
 }
