@@ -67,6 +67,7 @@ func Setup(app *fiber.App) {
 	app.Post("/loginLegacy", controllers.LoginOrigin)
 	app.Get("/auth", controllers.Auth)
 	app.Get("/oauth/callback", controllers.OAuthCallback)
+	app.Post("/register", controllers.RegisterUser)
 
 	authGroup := app.Group("")
 	authGroup.Use(AuthMiddleware)
@@ -113,6 +114,9 @@ func Setup(app *fiber.App) {
 	//Reviews routes
 	authGroup.Get("/getReview", controllers.GetReview)
 	authGroup.Post("/insertReview", controllers.InsertReview)
+	authGroup.Get("/getComplaints", controllers.GetComplaints)
+	authGroup.Post("/insertComplaints", controllers.InsertComplaints)
+	authGroup.Get("/callCenter", controllers.GetCallCenter)
 
 	//Membership routes
 	authGroup.Get("/getMembership", controllers.GetMembership)

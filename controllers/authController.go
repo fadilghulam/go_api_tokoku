@@ -11,9 +11,12 @@ import (
 	"os"
 	"time"
 
+	db "go_api_tokoku/config"
 	"go_api_tokoku/helpers"
+	model "go_api_tokoku/models"
 
 	"github.com/dgrijalva/jwt-go"
+	jwt2 "github.com/golang-jwt/jwt/v4"
 	"github.com/joho/godotenv"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -387,7 +390,7 @@ func OAuthCallback(c *fiber.Ctx) error {
 	}
 
 	// Generate JWT
-	fmt.Println(user)
+	// fmt.Println(user)
 	username := user["email"].(string)
 	tokenString, err := createJWT(username)
 	if err != nil {
@@ -395,5 +398,175 @@ func OAuthCallback(c *fiber.Ctx) error {
 		return c.Status(http.StatusInternalServerError).SendString("Could not generate token")
 	}
 
-	return c.JSON(fiber.Map{"token": tokenString})
+	// return c.JSON(fiber.Map{"token": tokenString})
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Success",
+		"user":    user,
+		"token":   tokenString,
+	})
+}
+
+type TemplateInputRegister struct {
+	Nik          string `json:"nik"`
+	FullName     string `json:"fullName"`
+	UserName     string `json:"userName"`
+	EmailAddress string `json:"emailAddress"`
+	PhoneNumber  string `json:"phoneNumber"`
+	Password     string `json:"password"`
+}
+
+type Claims struct {
+	ID       int64  `json:"id"`
+	Username string `json:"username"`
+	jwt2.RegisteredClaims
+}
+
+func RegisterUser(c *fiber.Ctx) error {
+
+	err := godotenv.Load()
+	if err != nil {
+		log.Println(err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	inputRegister := new(TemplateInputRegister)
+
+	if err := c.BodyParser(inputRegister); err != nil {
+		log.Println(err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	checkUser := new(model.User)
+	user := new(model.User)
+
+	tx := db.DB.Begin()
+
+	err = tx.Table("public.user").Where("username = ?", inputRegister.UserName).Find(checkUser).Error
+	if err != nil {
+		tx.Rollback()
+		log.Println(err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	if len(checkUser.Username) != 0 {
+		tx.Rollback()
+		return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
+			Message: "Username already exists",
+			Success: false,
+		})
+	}
+
+	user.FullName = inputRegister.FullName
+	user.Username = inputRegister.UserName
+
+	password := []byte(inputRegister.Password)
+	user.Password = fmt.Sprintf("%x", md5.Sum(password))
+	user.LevelID = model.Int32Array{32}
+	user.IsMultipleLogin = 0
+	user.IsAktif = "y"
+	user.IsVerified = 0
+
+	err = tx.Table("public.user").Create(&user).Error
+	if err != nil {
+		tx.Rollback()
+		log.Println(err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	userID := user.ID
+
+	var person model.HrPerson
+
+	person.Ktp = inputRegister.Nik
+	person.FullName = inputRegister.FullName
+	person.Email = inputRegister.EmailAddress
+	person.Phone = inputRegister.PhoneNumber
+	person.UserID = userID
+	person.AppId = 17
+
+	err = tx.Table("hr.person").Create(&person).Error
+	if err != nil {
+		tx.Rollback()
+		log.Println(err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	tx.Commit()
+
+	datas, err := helpers.ExecuteQuery(fmt.Sprintf(`SELECT NULL as employee,
+														u.id,
+														u.full_name as name,
+														ARRAY[]::varchar[] as permission,
+														NULL as userinfo
+													FROM public.user u
+													WHERE u.id = %v
+													GROUP BY u.id`, userID))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	// Calculate expiration time
+	addTime := 60 * 60 * 6
+	addTime = addTime * 4 * 30
+
+	// Create a new JWT token
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
+		ID:       int64(user.ID),
+		Username: user.Username,
+		RegisteredClaims: jwt2.RegisteredClaims{
+			IssuedAt:  jwt2.NewNumericDate(time.Now()),
+			ExpiresAt: jwt2.NewNumericDate(time.Now().Add(time.Duration(addTime) * time.Second)),
+		},
+	})
+
+	// Sign the token with a secret key
+	// kunci := "your-secret-key"
+	kunci := os.Getenv("JWTKEY")
+	tokenString, err := token.SignedString([]byte(kunci))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	type jwtData struct {
+		Token   string `json:"token"`
+		Expired int    `json:"expired"`
+	}
+
+	returnJwt := jwtData{
+		Token:   tokenString,
+		Expired: addTime,
+	}
+
+	// return c.JSON(fiber.Map{"token": tokenString})
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Success",
+		"data":    datas[0],
+		"jwt":     returnJwt,
+	})
+
+	// return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
+	// 	Message: "Register Success",
+	// 	Success: true,
+	// })
 }

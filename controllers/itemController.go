@@ -17,33 +17,58 @@ func GetItemsExchange(c *fiber.Ctx) error {
 
 	customerId := c.Query("customerId")
 
-	result, err := helpers.ExecuteQuery(fmt.Sprintf(`WITH exchanged as (SELECT exchange_id, coalesce(count(id),0) as counts 
-															FROM tk.customer_point_history 
-															WHERE customer_id = %v 
-															  AND exchange_id IS NOT NULL
-															  AND type = 'EXCHANGE'
-															GROUP BY customer_id, exchange_id)
-													SELECT ie.id,
-														ie.point,
-														ie.date_start,
-														ie.date_end,
-														ie.max_exchange,
-														ie.about,
-														ie.detail,
-														ie.term_condition,
-														COALESCE(ex.counts,0) as exchanged_count,
-														JSONB_BUILD_OBJECT(
-															'id', i.id,
-															'name', i.name,
-															'description', i.description,
-															'image', i.image
-														) as item
-													FROM tk.item_exchange ie
-													JOIN tk.item i
-														ON ie.item_id = i.id
-													LEFT JOIN exchanged ex
-														ON ie.id = ex.exchange_id
-													WHERE now() BETWEEN ie.date_start AND COALESCE(ie.date_end, now())`, customerId))
+	var query string
+	if customerId == "" {
+		query = fmt.Sprintf(`SELECT ie.id,
+									ie.point,
+									ie.date_start,
+									ie.date_end,	
+									ie.max_exchange,
+									ie.about,
+									ie.detail,
+									ie.term_condition,	
+									JSONB_BUILD_OBJECT(
+										'id', i.id,
+										'name', i.name,
+										'description', i.description,
+										'image', i.image
+									) as item		
+								FROM tk.item_exchange ie
+								JOIN tk.item i
+									ON ie.item_id = i.id	
+								WHERE now() BETWEEN ie.date_start AND COALESCE(ie.date_end, now())		
+		`)
+	} else {
+		query = fmt.Sprintf(`WITH exchanged as (SELECT exchange_id, coalesce(count(id),0) as counts 
+										FROM tk.customer_point_history 
+										WHERE customer_id = %v 
+										AND exchange_id IS NOT NULL
+										AND type = 'EXCHANGE'
+										GROUP BY customer_id, exchange_id)
+								SELECT ie.id,
+									ie.point,
+									ie.date_start,
+									ie.date_end,
+									ie.max_exchange,
+									ie.about,
+									ie.detail,
+									ie.term_condition,
+									COALESCE(ex.counts,0) as exchanged_count,
+									JSONB_BUILD_OBJECT(
+										'id', i.id,
+										'name', i.name,
+										'description', i.description,
+										'image', i.image
+									) as item
+								FROM tk.item_exchange ie
+								JOIN tk.item i
+									ON ie.item_id = i.id
+								LEFT JOIN exchanged ex
+									ON ie.id = ex.exchange_id
+								WHERE now() BETWEEN ie.date_start AND COALESCE(ie.date_end, now())`, customerId)
+	}
+
+	result, err := helpers.ExecuteQuery(query)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",

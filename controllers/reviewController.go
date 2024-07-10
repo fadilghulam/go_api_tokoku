@@ -57,3 +57,77 @@ func InsertReview(c *fiber.Ctx) error {
 		Success: true,
 	})
 }
+
+func GetCallCenter(c *fiber.Ctx) error {
+
+	type datas struct {
+		Whatsapp  string `json:"whatsapp"`
+		Instagram string `json:"instagram"`
+		Email     string `json:"email"`
+		Phone     string `json:"phone"`
+	}
+
+	// datas = map[string]string{
+
+	data := datas{
+		Whatsapp:  "6281359613831",
+		Instagram: "@pt-bks.com",
+		Email:     "armour.retail.family@pt-bks.com",
+		Phone:     "087741135521",
+	}
+
+	return c.Status(fiber.StatusOK).JSON(helpers.Response{
+		Message: "Success",
+		Success: true,
+		Data:    data,
+	})
+}
+
+func GetComplaints(c *fiber.Ctx) error {
+
+	complaints := []model.Complaints{}
+	// err := db.DB.Find(&complaints).Error
+	err := db.DB.Where("customer_id = ?", c.Query("customerId")).Find(&complaints).Order("id ASC").Error
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	if len(complaints) == 0 {
+		return c.Status(fiber.StatusOK).JSON(helpers.ResponseDataMultiple{
+			Message: "No complaints found",
+			Success: true,
+			Data:    nil,
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(helpers.ResponseDataMultiple{
+		Message: "Success",
+		Success: true,
+		Data:    complaints,
+	})
+}
+
+func InsertComplaints(c *fiber.Ctx) error {
+
+	complaints := new(model.Complaints)
+	if err := c.BodyParser(complaints); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+	err := db.DB.Create(&complaints).Error
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+	return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
+		Message: "Complaints has been added",
+		Success: true,
+	})
+}
