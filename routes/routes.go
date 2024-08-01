@@ -63,17 +63,27 @@ func Setup(app *fiber.App) {
 
 	//authentication routes
 	app.Post("/login", controllers.Login)
+	app.Post("/login2", controllers.Login2)
 	app.Post("/sendOtp", controllers.SendOtp)
 	app.Post("/loginLegacy", controllers.LoginOrigin)
 	app.Get("/auth", controllers.Auth)
 	app.Get("/oauth/callback", controllers.OAuthCallback)
 	app.Post("/register", controllers.RegisterUser)
+	app.Get("/sendNotif", controllers.SendNotificationFCM)
+	app.Post("/sendEmail", controllers.SendEmail)
 
 	authGroup := app.Group("")
 	authGroup.Use(AuthMiddleware)
 
 	//Customer routes
+	authGroup.Post("/insertTokenFCM", controllers.InsertTokenFCM)
 	authGroup.Get("/getDataCustomer", controllers.RefreshUser)
+	authGroup.Post("/uploadFileS3", controllers.DoUpload)
+	authGroup.Post("/deleteFileS3", controllers.DoDelete)
+	authGroup.Put("/updateProfile", controllers.UpdateProfile)
+
+	//Salesman routes
+	authGroup.Get("/getSalesman", controllers.GetSalesmanBy)
 
 	//Products routes
 	authGroup.Get("/produkTerkini", controllers.GetProdukTerkini)
@@ -120,6 +130,10 @@ func Setup(app *fiber.App) {
 
 	//Membership routes
 	authGroup.Get("/getMembership", controllers.GetMembership)
+
+	//Notification routes
+	authGroup.Get("/getNotification", controllers.GetNotifications)
+	// authGroup.Post("/insertReview", controllers.InsertReview)
 
 	// //reports
 	// app.Get("/revenues", controllers.GetRevenues)

@@ -17,29 +17,25 @@ import (
 
 var (
 	Q        = new(Query)
-	Customer *customer
-	User     *user
+	Salesman *salesman
 )
 
 func SetDefault(db *gorm.DB, opts ...gen.DOOption) {
 	*Q = *Use(db, opts...)
-	Customer = &Q.Customer
-	User = &Q.User
+	Salesman = &Q.Salesman
 }
 
 func Use(db *gorm.DB, opts ...gen.DOOption) *Query {
 	return &Query{
 		db:       db,
-		Customer: newCustomer(db, opts...),
-		User:     newUser(db, opts...),
+		Salesman: newSalesman(db, opts...),
 	}
 }
 
 type Query struct {
 	db *gorm.DB
 
-	Customer customer
-	User     user
+	Salesman salesman
 }
 
 func (q *Query) Available() bool { return q.db != nil }
@@ -47,8 +43,7 @@ func (q *Query) Available() bool { return q.db != nil }
 func (q *Query) clone(db *gorm.DB) *Query {
 	return &Query{
 		db:       db,
-		Customer: q.Customer.clone(db),
-		User:     q.User.clone(db),
+		Salesman: q.Salesman.clone(db),
 	}
 }
 
@@ -63,20 +58,17 @@ func (q *Query) WriteDB() *Query {
 func (q *Query) ReplaceDB(db *gorm.DB) *Query {
 	return &Query{
 		db:       db,
-		Customer: q.Customer.replaceDB(db),
-		User:     q.User.replaceDB(db),
+		Salesman: q.Salesman.replaceDB(db),
 	}
 }
 
 type queryCtx struct {
-	Customer ICustomerDo
-	User     IUserDo
+	Salesman ISalesmanDo
 }
 
 func (q *Query) WithContext(ctx context.Context) *queryCtx {
 	return &queryCtx{
-		Customer: q.Customer.WithContext(ctx),
-		User:     q.User.WithContext(ctx),
+		Salesman: q.Salesman.WithContext(ctx),
 	}
 }
 

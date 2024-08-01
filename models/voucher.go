@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 const TableNameVoucher = "tk.voucher"
@@ -20,6 +22,15 @@ func (a Int32Array) Value() (driver.Value, error) {
 		arr[i] = v
 	}
 	return arr, nil
+}
+
+func (a Int32Array) Value2() (driver.Value, error) {
+	// Convert to []int32 to []int64 for pq.Array
+	int64Array := make([]int64, len(a))
+	for i, v := range a {
+		int64Array[i] = int64(v)
+	}
+	return pq.Array(int64Array), nil
 }
 
 // Scan converts a PostgreSQL array to Int32Array.

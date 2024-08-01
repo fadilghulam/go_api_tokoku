@@ -14,6 +14,7 @@ func RefreshUser(c *fiber.Ctx) error {
 	datas, err := helpers.ExecuteQuery(fmt.Sprintf(`SELECT NULL as employee,
 														u.id,
 														u.full_name as name,
+														u.username,
 														ARRAY[]::varchar[] as permission,
 														JSONB_AGG(c.*) as userinfo
 													FROM public.user u

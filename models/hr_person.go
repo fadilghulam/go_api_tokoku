@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-const tableHrPerson = "hr_person"
+const tableHrPerson = "hr.person"
 
 type HrPerson struct {
 	ID               int64     `gorm:"column:id;primaryKey;autoIncrement:true" json:"id"`
@@ -16,8 +16,8 @@ type HrPerson struct {
 	MaritalStatus    string    `gorm:"column:marital_status;default:null" json:"column:maritalStatus"`
 	Nationality      string    `gorm:"column:nationality;default:null" json:"column:nationality"`
 	Address          string    `gorm:"column:address;default:null" json:"column:address"`
-	Phone            string    `gorm:"column:phone;default:null" json:"column:phone"`
-	Email            string    `gorm:"column:email;default:null" json:"column:email"`
+	Phone            string    `gorm:"column:phone;default:null" json:"column:phone" validate:"min=11"`
+	Email            string    `gorm:"column:email;default:null" json:"column:email" validate:"email"`
 	Ktp              string    `gorm:"column:ktp;default:null" json:"column:ktp"`
 	KartuKeluarga    string    `gorm:"column:kartu_keluarga;default:null" json:"column:kartuKeluarga"`
 	Photo            string    `gorm:"column:photo;default:null" json:"column:photo"`
@@ -59,4 +59,10 @@ type HrPerson struct {
 
 func (*HrPerson) TableName() string {
 	return tableHrPerson
+}
+
+type ErrorResponse struct {
+	FailedField string
+	Tag         string
+	Value       string
 }

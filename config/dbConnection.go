@@ -53,7 +53,7 @@ func Connect() {
 	fmt.Println("db connected successfully")
 
 	// go GenerateStruct(db)
-	// GenerateStruct(db)
+	GenerateStruct(db)
 
 	// AutoMigrate(db)
 	//if err := DB.AutoMigrate(&models.Cashier{}, &models.Category{}, &models.Payment{}, &models.PaymentType{}, &models.Product{}, &models.Discount{}, &models.Order{}).Error; err != nil {
@@ -87,8 +87,8 @@ func GenerateStruct(db *gorm.DB) *gorm.DB {
 
 	g.ApplyBasic(
 		// Generate struct `User` based on table `users`
-		g.GenerateModel("user"),
-		g.GenerateModel("customer"),
+		g.GenerateModel("salesman"),
+		// g.GenerateModel("customer"),
 
 	// 	// Generate struct `Employee` based on table `users`
 	//    g.GenerateModelAs("users", "Employee"),

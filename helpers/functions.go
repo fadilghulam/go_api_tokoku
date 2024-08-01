@@ -6,15 +6,20 @@ import (
 	"encoding/json"
 	"fmt"
 	db "go_api_tokoku/config"
+	model "go_api_tokoku/models"
 	"log"
+	"net/http"
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	firebase "firebase.google.com/go"
+	"firebase.google.com/go/messaging"
 	"github.com/gofiber/fiber/v2"
 	"github.com/mitchellh/mapstructure"
+	"google.golang.org/api/option"
 )
 
 func ExecuteQuery(query string) ([]map[string]interface{}, error) {
@@ -481,4 +486,108 @@ func ConvertStringToInt64(i string) int64 {
 func FloatToString(input_num float64) string {
 	// to convert a float number to a string
 	return strconv.FormatFloat(input_num, 'f', 6, 64)
+}
+
+func TrimLeftChar(s string) string {
+	for i := range s {
+		if i > 0 {
+			return s[i:]
+		}
+	}
+	return s[:0]
+}
+
+func ArrayColumn(data []any, column string) []any {
+
+	var result []any
+	for _, v := range data {
+		result = append(result, v.(map[string]interface{})[column])
+	}
+
+	return result
+}
+
+func SendNotification(title string, body string, userIds int, dataSend map[string]string, c *fiber.Ctx) error {
+
+	tokenFCM := new([]model.TokenFcm)
+
+	// fmt.Println(userIds)
+
+	err := db.DB.Where("user_id IN ? AND app_name = ?", userIds, "tokoku").Find(&tokenFCM).Error
+
+	if err != nil {
+		log.Println(err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	var tokens []string
+	for _, token := range *tokenFCM {
+		tokens = append(tokens, token.Token)
+	}
+
+	type NotificationRequest struct {
+		Title  string            `json:"title"`
+		Body   string            `json:"body"`
+		Tokens []string          `json:"tokens"`
+		Data   map[string]string `json:"data"` // additional data
+	}
+
+	var req NotificationRequest
+
+	req.Title = title
+	req.Body = body
+	req.Tokens = tokens
+	req.Data = dataSend
+
+	// Load the service account key JSON file
+	opt := option.WithCredentialsFile("middleware/tokoku.json")
+
+	// Initialize the Firebase app
+	ctx := context.Background()
+	app, err := firebase.NewApp(ctx, nil, opt)
+	if err != nil {
+		log.Fatalf("error initializing app: %v\n", err)
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to initialize Firebase app",
+		})
+	}
+
+	// Initialize the FCM client
+	client, err := app.Messaging(ctx)
+	if err != nil {
+		log.Fatalf("error getting Messaging client: %v\n", err)
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to initialize FCM client",
+		})
+	}
+
+	// Create the multicast message to send
+	message := &messaging.MulticastMessage{
+		Tokens: req.Tokens,
+		Notification: &messaging.Notification{
+			Title: req.Title,
+			Body:  req.Body,
+		},
+		Data: req.Data,
+	}
+
+	// Send the message
+	response, err := client.SendMulticast(ctx, message)
+	if err != nil {
+		log.Fatalf("error sending FCM message: %v\n", err)
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to send FCM notification",
+		})
+	}
+
+	log.Printf("Successfully sent FCM message: %v\n", response)
+	return c.JSON(fiber.Map{
+		"message": "Notification sent successfully",
+		"success": response.SuccessCount,
+		"failure": response.FailureCount,
+		"errors":  response.Responses,
+	})
 }

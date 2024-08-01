@@ -4,6 +4,7 @@ import (
 	db "go_api_tokoku/config"
 	"go_api_tokoku/helpers"
 	model "go_api_tokoku/models"
+	"log"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -87,7 +88,17 @@ func GetComplaints(c *fiber.Ctx) error {
 
 	complaints := []model.Complaints{}
 	// err := db.DB.Find(&complaints).Error
-	err := db.DB.Where("customer_id = ?", c.Query("customerId")).Find(&complaints).Order("id ASC").Error
+
+	customerId := c.Query("customerId")
+	if customerId == "" {
+		log.Println("no customerId")
+		return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
+			Message: "No complaints found",
+			Success: true,
+		})
+	}
+	// err := db.DB.Find(&complaints).Error
+	err := db.DB.Where("customer_id = ?", customerId).Find(&complaints).Order("id ASC").Error
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",

@@ -42,10 +42,11 @@ func (a *StringArray) Scan(value interface{}) error {
 
 type Complaints struct {
 	ID                int64       `gorm:"column:id;primaryKey;autoIncrement:true" json:"id"`
+	CustomerID        int64       `gorm:"column:customer_id;default:null" json:"customerId"`
 	TransactionId     int64       `gorm:"column:transaction_id;default:null" json:"transactionId"`
 	TransactionItemId int32       `gorm:"column:transaction_item_id;default:null" json:"transactionItemId"`
-	Description       int64       `gorm:"column:description;default:null" json:"description"`
-	Image             StringArray `gorm:"column:image;default:null" json:"image"`
+	Description       string      `gorm:"column:description;default:null" json:"description"`
+	Image             StringArray `gorm:"type:varchar[];column:image;default:null" json:"image"`
 	CreatedAt         time.Time   `gorm:"column:created_at;not null;default:now()" json:"created_at"`
 	UpdatedAt         time.Time   `gorm:"column:updated_at;not null;default:now()" json:"updated_at"`
 }
