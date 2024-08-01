@@ -53,7 +53,7 @@ func Connect() {
 	fmt.Println("db connected successfully")
 
 	// go GenerateStruct(db)
-	GenerateStruct(db)
+	// GenerateStruct(db)
 
 	// AutoMigrate(db)
 	//if err := DB.AutoMigrate(&models.Cashier{}, &models.Category{}, &models.Payment{}, &models.PaymentType{}, &models.Product{}, &models.Discount{}, &models.Order{}).Error; err != nil {

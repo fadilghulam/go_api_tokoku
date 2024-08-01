@@ -601,3 +601,117 @@ func CheckoutCart(c *fiber.Ctx) error {
 		})
 	}
 }
+
+func QuickCheckout(c *fiber.Ctx) error {
+
+	type templateQuickCheckout struct {
+		CustomerID int64   `json:"customerId"`
+		Provinsi   string  `json:"prov"`
+		Kabupaten  string  `json:"kab"`
+		Kecamatan  string  `json:"kec"`
+		Kelurahan  string  `json:"kel"`
+		Note       string  `json:"note"`
+		SrID       int64   `json:"srId"`
+		RayonID    int64   `json:"rayonId"`
+		BranchID   int64   `json:"branchId"`
+		VoucherID  int64   `json:"voucherId"`
+		ProdukID   int32   `json:"produkId"`
+		Quantity   int64   `json:"quantity"`
+		TotalPrice int64   `json:"totalPrice"`
+		Point      int16   `json:"point"`
+		Harga      float64 `json:"harga"`
+		Diskon     float64 `json:"diskon"`
+	}
+
+	requestBody := new(templateQuickCheckout)
+
+	err := c.BodyParser(requestBody)
+	if err != nil {
+		log.Println(err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something's wrong with your input",
+			Success: false,
+		})
+	}
+
+	tx := db.DB.Begin()
+
+	var transactionID int
+
+	transaction := model.TkTransaction{
+		TransactionStateID: 1,
+		CustomerID:         requestBody.CustomerID,
+		TransactionDate:    time.Now(),
+		Provinsi:           requestBody.Provinsi,
+		Kabupaten:          requestBody.Kabupaten,
+		Kecamatan:          requestBody.Kecamatan,
+		Kelurahan:          requestBody.Kelurahan,
+		Note:               requestBody.Note,
+		TotalTransaction:   requestBody.TotalPrice,
+	}
+
+	if requestBody.SrID != 0 {
+		transaction.SrID = requestBody.SrID
+	}
+	if requestBody.RayonID != 0 {
+		transaction.RayonID = requestBody.RayonID
+	}
+	if requestBody.BranchID != 0 {
+		transaction.BranchID = requestBody.BranchID
+	}
+
+	if err := tx.Create(&transaction).Error; err != nil {
+		tx.Rollback()
+		log.Println("failed to insert transaction: ", err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	transactionID = transaction.ID
+
+	transactionDetail := model.TkTransactionDetail{
+		TransactionID: int64(transactionID),
+		ProdukID:      int64(requestBody.ProdukID),
+		Qty:           requestBody.Quantity,
+		Harga:         requestBody.Harga,
+		Diskon:        requestBody.Diskon,
+		Note:          requestBody.Note,
+		Point:         int64(requestBody.Point),
+	}
+
+	if err := tx.Create(&transactionDetail).Error; err != nil {
+		tx.Rollback()
+		log.Println("failed to insert transaction: ", err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	if requestBody.VoucherID != 0 {
+		querySubVoucher := fmt.Sprintf("UPDATE tk.voucher_customer SET amount_left = amount_left - 1 WHERE voucher_id IN (%v) AND customer_id = %v", requestBody.VoucherID, requestBody.CustomerID)
+		subtractVoucher := tx.Exec(querySubVoucher)
+		if subtractVoucher.Error != nil {
+			tx.Rollback()
+			log.Println("failed to subtract voucher: ", subtractVoucher.Error.Error())
+			return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+				Message: "Something went wrong",
+				Success: false,
+			})
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	} else {
+		return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
+			Message: "Checkout success",
+			Success: true,
+		})
+	}
+}

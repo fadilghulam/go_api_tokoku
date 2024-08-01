@@ -101,6 +101,7 @@ func Setup(app *fiber.App) {
 	authGroup.Put("/updateCart", controllers.UpdateCart)
 	authGroup.Delete("/deleteCart", controllers.DeleteCart)
 	authGroup.Post("/checkoutCart", controllers.CheckoutCart)
+	authGroup.Post("/quickCheckout", controllers.QuickCheckout)
 
 	//Voucher routes
 	authGroup.Post("/addVoucher", controllers.InsertVoucher)

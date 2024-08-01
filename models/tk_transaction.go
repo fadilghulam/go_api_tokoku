@@ -12,13 +12,13 @@ type TkTransaction struct {
 	ReferenceName      string    `gorm:"column:reference_name;default:null" json:"reference_name"`
 	TransactionDate    time.Time `gorm:"column:transaction_date" json:"transaction_date"`
 	TotalTransaction   int64     `gorm:"column:total_transaction" json:"total_transaction"`
-	Provinsi           string    `gorm:"column:provinsi" json:"provinsi"`
+	Provinsi           string    `gorm:"column:provinsi;default:null" json:"provinsi"`
 	PronvisiID         int64     `gorm:"column:pronvisi_id;default:null" json:"pronvisi_id"`
-	Kabupaten          string    `gorm:"column:kabupaten" json:"kabupaten"`
+	Kabupaten          string    `gorm:"column:kabupaten;default:null" json:"kabupaten"`
 	KabupatenID        int64     `gorm:"column:kabupaten_id;default:null" json:"kabupaten_id"`
-	Kecamatan          string    `gorm:"column:kecamatan" json:"kecamatan"`
+	Kecamatan          string    `gorm:"column:kecamatan;default:null" json:"kecamatan"`
 	KecamatanID        int64     `gorm:"column:kecamatan_id;default:null" json:"kecamatan_id"`
-	Kelurahan          string    `gorm:"column:kelurahan" json:"kelurahan"`
+	Kelurahan          string    `gorm:"column:kelurahan;default:null" json:"kelurahan"`
 	KelurahanID        int64     `gorm:"column:kelurahan_id;default:null" json:"kelurahan_id"`
 	SrID               int64     `gorm:"column:sr_id;default:null" json:"sr_id"`
 	RayonID            int64     `gorm:"column:rayon_id;default:null" json:"rayon_id"`
