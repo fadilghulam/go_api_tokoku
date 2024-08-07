@@ -345,14 +345,6 @@ func SendEmail(c *fiber.Ctx) error {
 
 				hashOTP := helpers.NewCurl(dataOtp, "POST", "https://rest.pt-bks.com/olympus/generateHashed", c)
 
-				if err != nil {
-					log.Println(err.Error())
-					return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
-						"message": "Failed to generate otp",
-						"success": false,
-					})
-				}
-
 				// fmt.Println("Otp: " + otp)
 
 				if err := send(req.To, req.Subject, req.Title, otp, req.Body); err != nil {

@@ -19,7 +19,7 @@ func GetItemsExchange(c *fiber.Ctx) error {
 
 	var query string
 	if customerId == "" {
-		query = fmt.Sprintf(`SELECT ie.id,
+		query = `SELECT ie.id,
 									ie.point,
 									DATE(ie.date_start) as date_start,
 									DATE(ie.date_end) as date_end,	
@@ -37,7 +37,7 @@ func GetItemsExchange(c *fiber.Ctx) error {
 								JOIN tk.item i
 									ON ie.item_id = i.id	
 								WHERE now() BETWEEN ie.date_start AND COALESCE(ie.date_end, now())		
-		`)
+		`
 	} else {
 		query = fmt.Sprintf(`WITH exchanged as (SELECT exchange_id, coalesce(count(id),0) as counts 
 										FROM tk.customer_point_history 
