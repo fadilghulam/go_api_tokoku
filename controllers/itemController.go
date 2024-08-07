@@ -21,8 +21,8 @@ func GetItemsExchange(c *fiber.Ctx) error {
 	if customerId == "" {
 		query = fmt.Sprintf(`SELECT ie.id,
 									ie.point,
-									ie.date_start,
-									ie.date_end,	
+									DATE(ie.date_start) as date_start,
+									DATE(ie.date_end) as date_end,	
 									ie.max_exchange,
 									ie.about,
 									ie.detail,
@@ -47,8 +47,8 @@ func GetItemsExchange(c *fiber.Ctx) error {
 										GROUP BY customer_id, exchange_id)
 								SELECT ie.id,
 									ie.point,
-									ie.date_start,
-									ie.date_end,
+									DATE(ie.date_start) as date_start,
+									DATE(ie.date_end) as date_end,
 									ie.max_exchange,
 									ie.about,
 									ie.detail,
@@ -127,6 +127,8 @@ func GetCartItem(c *fiber.Ctx) error {
 								ci.item_exchange_id,
 								ci.point,
 								ci.qty,
+								ie.date_start,
+								ie.date_end,
 								JSONB_BUILD_OBJECT(
 									'id', i.id,
 									'name', i.name,

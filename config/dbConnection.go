@@ -87,7 +87,7 @@ func GenerateStruct(db *gorm.DB) *gorm.DB {
 
 	g.ApplyBasic(
 		// Generate struct `User` based on table `users`
-		g.GenerateModel("salesman"),
+		g.GenerateModel("otp"),
 		// g.GenerateModel("customer"),
 
 	// 	// Generate struct `Employee` based on table `users`

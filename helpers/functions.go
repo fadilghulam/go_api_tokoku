@@ -1,12 +1,14 @@
 package helpers
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	db "go_api_tokoku/config"
 	model "go_api_tokoku/models"
+	"io"
 	"log"
 	"net/http"
 	"reflect"
@@ -590,4 +592,41 @@ func SendNotification(title string, body string, userIds int, dataSend map[strin
 		"failure": response.FailureCount,
 		"errors":  response.Responses,
 	})
+}
+
+func NewCurl(data map[string]string, method string, url string, c *fiber.Ctx) map[string]interface{} {
+
+	client := &http.Client{}
+
+	dataSend, err := json.Marshal(data)
+	if err != nil {
+		fmt.Println("Error marshaling JSON:", err)
+	}
+
+	// Create a POST request with a JSON payload
+	req, err := http.NewRequest(method, url, bytes.NewReader(dataSend))
+	if err != nil {
+		fmt.Println("Error creating request:", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Send the request
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Error sending request:", err)
+	}
+	defer resp.Body.Close()
+
+	// Read the response body
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("Error reading response:", err)
+	}
+
+	responseData, err := ByteResponse(responseBody)
+	if err != nil {
+		fmt.Println("Error reading response:", err)
+	}
+
+	return responseData
 }

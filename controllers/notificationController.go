@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"bytes"
+	"crypto/rand"
+	"fmt"
 	db "go_api_tokoku/config"
 	"go_api_tokoku/helpers"
 	model "go_api_tokoku/models"
@@ -9,7 +11,9 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"text/template"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
@@ -166,7 +170,7 @@ func SendNotificationFCM(c *fiber.Ctx) error {
 	})
 }
 
-func send(to, subject, title, body string) error {
+func send(to, subject, title, otp, body string) error {
 
 	err := godotenv.Load()
 	if err != nil {
@@ -184,7 +188,7 @@ func send(to, subject, title, body string) error {
 	// }
 
 	// Load and parse the HTML template
-	tmpl, err := template.ParseFiles("views/email_template.html")
+	tmpl, err := template.ParseFiles("views/email_template2.html")
 	if err != nil {
 		return err
 	}
@@ -192,14 +196,20 @@ func send(to, subject, title, body string) error {
 	// Create a buffer to store the executed template
 	var tpl bytes.Buffer
 	templateData := struct {
-		Subject string
-		Title   string
-		Body    string
+		Subject  string
+		Title    string
+		Body     string
+		Otp      string
+		OtpSlice []string
 	}{
-		Subject: subject,
-		Title:   title,
-		Body:    body,
+		Subject:  subject,
+		Title:    title,
+		Body:     body,
+		Otp:      otp,
+		OtpSlice: strings.Split(otp, ""),
 	}
+
+	// fmt.Println(templateData)
 
 	if err := tmpl.Execute(&tpl, templateData); err != nil {
 		return err
@@ -236,6 +246,21 @@ func send(to, subject, title, body string) error {
 	return nil
 }
 
+func generateOTP(length int) string {
+	otp := ""
+	for i := 0; i < length; i++ {
+		// Generate a random digit between 0 and 9
+		num := make([]byte, 1)
+		_, err := rand.Read(num)
+		if err != nil {
+			log.Fatal(err)
+		}
+		digit := strconv.Itoa(int(num[0] % 10))
+		otp += digit
+	}
+	return otp
+}
+
 func SendEmail(c *fiber.Ctx) error {
 	type EmailRequest struct {
 		To      string `json:"to"`
@@ -248,18 +273,129 @@ func SendEmail(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		log.Println(err.Error())
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "Unable to parse request body",
+			"message": "Unable to parse request body",
+			"success": false,
 		})
 	}
 
-	if err := send(req.To, req.Subject, req.Title, req.Body); err != nil {
+	checkUser, err := helpers.ExecuteQuery(fmt.Sprintf(`SELECT u.*, u.full_name as person_name, u.id::integer as new_user_id FROM public.user u
+														JOIN hr.person p
+															ON u.id = p.user_id
+														WHERE TRUE AND p.email = '%s'
+														ORDER BY dtm_crt DESC`, req.To))
+
+	if err != nil {
 		log.Println(err.Error())
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to send email",
+			"message": "Failed to get user info",
+			"success": false,
 		})
 	}
 
-	return c.JSON(fiber.Map{
+	if len(checkUser) == 0 {
+		log.Println("user not found " + req.To)
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+			"message": "User not found",
+			"success": true,
+		})
+	} else {
+		checkApp, err := helpers.ExecuteQuery(fmt.Sprintf(`SELECT * 
+															FROM public.user u
+															JOIN user_level ul
+															ON ul.id = ANY(u.level_id)
+															LEFT JOIN app a
+															ON a.id = ANY(ul.access_app_id)
+															WHERE (UPPER(a.name) = UPPER('%s') OR -1 = ANY(ul.access_app_id)) AND u.id = %v`, "TOKOKU", checkUser[0]["id"]))
+
+		if err != nil {
+			log.Println(err.Error())
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+				"message": "Failed to get app permission",
+				"success": false,
+			})
+		}
+
+		if len(checkApp) == 0 {
+			log.Println("app permission not found" + req.To)
+			return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+				"message": "Anda tidak memiliki akses untuk aplikasi ini",
+				"success": true,
+			})
+		} else {
+
+			checkOtp, err := helpers.ExecuteQuery(fmt.Sprintf(`SELECT * FROM public.otp o
+																WHERE UPPER(o.app_name) = UPPER('%s') AND o.user_id = %v AND UPPER(o.type) = '%s'
+																AND expired_at >=NOW() AND confirmed_at IS NULL
+																`, "TOKOKU", checkUser[0]["id"], "EMAIL"))
+
+			if err != nil {
+				log.Println(err.Error())
+				return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+					"message": "Failed to get log otp",
+					"success": false,
+				})
+			}
+
+			if len(checkOtp) == 0 {
+				otp := generateOTP(5)
+
+				dataOtp := map[string]string{
+					"otp": otp,
+				}
+
+				hashOTP := helpers.NewCurl(dataOtp, "POST", "https://rest.pt-bks.com/olympus/generateHashed", c)
+
+				if err != nil {
+					log.Println(err.Error())
+					return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+						"message": "Failed to generate otp",
+						"success": false,
+					})
+				}
+
+				// fmt.Println("Otp: " + otp)
+
+				if err := send(req.To, req.Subject, req.Title, otp, req.Body); err != nil {
+					log.Println(err.Error())
+					return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+						"message": "Failed to send email otp",
+						"success": false,
+					})
+				} else {
+
+					tableOtp := new(model.Otp)
+
+					tableOtp.AppName = "TOKOKU"
+					tableOtp.Type = "EMAIL"
+					tableOtp.SendTo = req.To
+					tableOtp.Otp = hashOTP["otpHash"].(string)
+					tableOtp.UserID = int32(checkUser[0]["new_user_id"].(float64))
+					tableOtp.CreatedAt = time.Now()
+					tableOtp.UpdatedAt = time.Now()
+					tableOtp.ExpiredAt = time.Now().Add(time.Minute * 3)
+
+					if err := db.DB.Create(tableOtp).Error; err != nil {
+						log.Println(err.Error())
+						return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+							"message": "Failed to insert otp",
+							"success": false,
+						})
+					}
+				}
+
+				// fmt.Println(otpHash)
+			} else {
+				return c.Status(http.StatusOK).JSON(fiber.Map{
+					"message": "Otp already sent",
+					"success": true,
+				})
+			}
+
+		}
+	}
+
+	return c.Status(http.StatusOK).JSON(fiber.Map{
 		"message": "Email sent successfully",
+		"success": true,
 	})
 }

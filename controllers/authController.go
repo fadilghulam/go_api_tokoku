@@ -2,13 +2,14 @@ package controllers
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	db "go_api_tokoku/config"
@@ -20,6 +21,7 @@ import (
 	"github.com/joho/godotenv"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/idtoken"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -37,17 +39,198 @@ type ResponseData struct {
 	Jwt     map[string]interface{} `json:"jwt"`
 }
 
-func createJWT(userID string) (string, error) {
+func LoginOauth(c *fiber.Ctx) error {
+
+	token := c.FormValue("token")
 
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		fmt.Println("Error loading .env file")
+	}
+
+	validator, err := idtoken.NewValidator(context.Background())
+	if err != nil {
+		fmt.Println("Failed to create ID token validator")
+	}
+
+	payload, err := validator.Validate(context.Background(), token, os.Getenv("FIREBASE_AUDIENCE"))
+	if err != nil {
+		fmt.Println("Token is invalid")
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"success": false, "message": "Token is invalid"})
+	}
+
+	email := payload.Claims["email"].(string)
+	emailVerif := payload.Claims["email_verified"].(bool)
+	name := payload.Claims["name"].(string)
+	picture := payload.Claims["picture"].(string)
+	googleId := payload.Claims["sub"].(string)
+
+	var data map[string]interface{}
+	var jwtMap map[string]interface{}
+
+	if emailVerif {
+		user := new(model.User)
+		tx := db.DB.Begin()
+
+		err = tx.Where("username = ?", email).Find(&user).Error
+		if err != nil {
+			tx.Rollback()
+			fmt.Println(err.Error())
+			return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+				Message: "Something went wrong",
+				Success: false,
+			})
+		}
+		password := fmt.Sprintf("%x", md5.Sum([]byte(os.Getenv("DEFAULT_PASSWORD"))))
+		levelId, _ := strconv.Atoi(os.Getenv("DEFAULT_LEVEL_TOKOKU"))
+		arrLevelId := model.Int32Array{
+			int32(levelId),
+		}
+
+		if user.ID == 0 {
+
+			newUser := &model.User{
+				Username:     email,
+				Password:     password,
+				FullName:     name,
+				LevelID:      arrLevelId,
+				IsAktif:      "y",
+				ProfilePhoto: picture,
+				GoogleId:     googleId,
+				IsVerified:   0,
+			}
+
+			err := tx.Create(&newUser).Error
+
+			if err != nil {
+				tx.Rollback()
+				fmt.Println(err.Error())
+				return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+					Message: "Something went wrong",
+					Success: false,
+				})
+			}
+
+			// userId := user.ID
+			appId, _ := strconv.Atoi(os.Getenv("DEFAULT_APPID_TOKOKU"))
+
+			// fmt.Println("user id: ", user.ID, "userid: ", userId)
+
+			err = tx.Create(&model.HrPerson{
+				UserID:   newUser.ID,
+				Email:    email,
+				FullName: name,
+				IsActive: 1,
+				AppId:    int32(appId),
+			}).Error
+
+			if err != nil {
+				tx.Rollback()
+				fmt.Println(err.Error())
+				return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+					Message: "Something went wrong",
+					Success: false,
+				})
+			}
+
+			err = tx.Commit().Error
+			if err != nil {
+				tx.Rollback()
+				fmt.Println(err.Error())
+				return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+					Message: "Something went wrong",
+					Success: false,
+				})
+			}
+
+			tokenString, expired, err := createJWT(email)
+			if err != nil {
+				fmt.Println("Error:", err.Error())
+				return c.Status(http.StatusInternalServerError).SendString("Could not generate token")
+			}
+
+			data = map[string]interface{}{
+				"email":         email,
+				"employee":      nil,
+				"id":            user.ID,
+				"name":          name,
+				"permission":    nil,
+				"phone":         nil,
+				"profile_photo": picture,
+				"username":      email,
+				"userInfo":      nil,
+			}
+
+			jwtMap = map[string]interface{}{
+				"expired": expired,
+				"token":   tokenString,
+			}
+		} else {
+
+			person := new(model.HrPerson)
+			err = tx.Where("user_id = ?", user.ID).Find(&person).Error
+			if err != nil {
+				tx.Rollback()
+				fmt.Println(err.Error())
+				return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+					Message: "Something went wrong",
+					Success: false,
+				})
+			}
+
+			customer := []model.Customer{}
+			err = tx.Where("user_id = ?", user.ID).Find(&customer).Error
+			if err != nil {
+				tx.Rollback()
+				fmt.Println(err.Error())
+				return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+					Message: "Something went wrong",
+					Success: false,
+				})
+			}
+
+			tokenString, expired, err := createJWT(email)
+			if err != nil {
+				fmt.Println("Error:", err.Error())
+				return c.Status(http.StatusInternalServerError).SendString("Could not generate token")
+			}
+
+			data = map[string]interface{}{
+				"email":         person.Email,
+				"employee":      nil,
+				"id":            user.ID,
+				"name":          person.FullName,
+				"permission":    nil,
+				"phone":         person.Phone,
+				"profile_photo": user.ProfilePhoto,
+				"username":      user.Username,
+				"userInfo":      customer,
+			}
+
+			jwtMap = map[string]interface{}{
+				"expired": expired,
+				"token":   tokenString,
+			}
+		}
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{"auth": true, "success": true, "message": "Login Success", "data": data, "jwt": jwtMap})
+
+}
+
+func createJWT(userID string) (string, int64, error) {
+
+	err := godotenv.Load()
+	if err != nil {
+		fmt.Println("Error loading .env file")
 	}
 
 	claims := jwt.MapClaims{
 		"id":  userID,
 		"exp": time.Now().Add(time.Hour * 72).Unix(),
 	}
+
+	expired := time.Now().Add(time.Hour * 72).Unix()
 
 	secretKey := []byte(os.Getenv("JWTKEY"))
 
@@ -58,7 +241,7 @@ func createJWT(userID string) (string, error) {
 		// return "", err
 		fmt.Println("Error:", err.Error())
 	}
-	return result, nil
+	return result, expired, nil
 }
 
 func LoginOrigin(c *fiber.Ctx) error {
@@ -96,7 +279,7 @@ func LoginOrigin(c *fiber.Ctx) error {
 	// Create a POST request with a JSON payload
 	req, err := http.NewRequest("POST", "https://rest.pt-bks.com/olympus/login", bytes.NewReader(dataSend))
 	if err != nil {
-		log.Fatal("Error creating request:", err)
+		fmt.Println("Error creating request:", err)
 		return c.SendStatus(http.StatusInternalServerError)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -104,7 +287,7 @@ func LoginOrigin(c *fiber.Ctx) error {
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal("Error sending request:", err)
+		fmt.Println("Error sending request:", err)
 		return c.SendStatus(http.StatusInternalServerError)
 	}
 	defer resp.Body.Close()
@@ -114,14 +297,14 @@ func LoginOrigin(c *fiber.Ctx) error {
 	// Read the response body
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal("Error reading response:", err)
+		fmt.Println("Error reading response:", err)
 	}
 
 	// fmt.Println(string(responseBody))
 
 	responseData, err := helpers.ByteResponse(responseBody)
 	if err != nil {
-		log.Fatal("Error reading response:", err)
+		fmt.Println("Error reading response:", err)
 	}
 
 	return c.Status(resp.StatusCode).JSON(responseData)
@@ -162,7 +345,7 @@ func Login(c *fiber.Ctx) error {
 	// Create a POST request with a JSON payload
 	req, err := http.NewRequest("POST", "https://rest.pt-bks.com/olympus/login", bytes.NewReader(dataSend))
 	if err != nil {
-		log.Fatal("Error creating request:", err)
+		fmt.Println("Error creating request:", err)
 		return c.SendStatus(http.StatusInternalServerError)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -170,7 +353,7 @@ func Login(c *fiber.Ctx) error {
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal("Error sending request:", err)
+		fmt.Println("Error sending request:", err)
 		return c.SendStatus(http.StatusInternalServerError)
 	}
 	defer resp.Body.Close()
@@ -178,12 +361,12 @@ func Login(c *fiber.Ctx) error {
 	// Read the response body
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal("Error reading response:", err)
+		fmt.Println("Error reading response:", err)
 	}
 
 	responseData, err := helpers.ByteResponse(responseBody)
 	if err != nil {
-		log.Fatal("Error reading response:", err)
+		fmt.Println("Error reading response:", err)
 	}
 
 	switch responseData["data"].(type) {
@@ -234,7 +417,7 @@ func Login2(c *fiber.Ctx) error {
 	// Create a POST request with a JSON payload
 	req, err := http.NewRequest("POST", "https://rest.pt-bks.com/olympus/login2", bytes.NewReader(dataSend))
 	if err != nil {
-		log.Fatal("Error creating request:", err)
+		fmt.Println("Error creating request:", err)
 		return c.SendStatus(http.StatusInternalServerError)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -242,7 +425,7 @@ func Login2(c *fiber.Ctx) error {
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal("Error sending request:", err)
+		fmt.Println("Error sending request:", err)
 		return c.SendStatus(http.StatusInternalServerError)
 	}
 	defer resp.Body.Close()
@@ -250,12 +433,12 @@ func Login2(c *fiber.Ctx) error {
 	// Read the response body
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal("Error reading response:", err)
+		fmt.Println("Error reading response:", err)
 	}
 
 	responseData, err := helpers.ByteResponse(responseBody)
 	if err != nil {
-		log.Fatal("Error reading response:", err)
+		fmt.Println("Error reading response:", err)
 	}
 
 	// switch responseData["data"].(type) {
@@ -311,7 +494,7 @@ func SendOtp(c *fiber.Ctx) error {
 	// Create a POST request with a JSON payload
 	req, err := http.NewRequest("POST", "https://rest.pt-bks.com/olympus/sendOtpTokoku", bytes.NewReader(dataSend))
 	if err != nil {
-		log.Fatal("Error creating request:", err)
+		fmt.Println("Error creating request:", err)
 		return c.SendStatus(http.StatusInternalServerError)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -319,7 +502,7 @@ func SendOtp(c *fiber.Ctx) error {
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal("Error sending request:", err)
+		fmt.Println("Error sending request:", err)
 		return c.SendStatus(http.StatusInternalServerError)
 	}
 	defer resp.Body.Close()
@@ -327,12 +510,12 @@ func SendOtp(c *fiber.Ctx) error {
 	// Read the response body
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal("Error reading response:", err)
+		fmt.Println("Error reading response:", err)
 	}
 
 	responseData, err := helpers.ByteResponse(responseBody)
 	if err != nil {
-		log.Fatal("Error reading response:", err)
+		fmt.Println("Error reading response:", err)
 	}
 
 	// if len(responseData["data"].(map[string]interface{})) == 0 {
@@ -382,12 +565,12 @@ func LoginGPT(c *fiber.Ctx) error {
 	// Read response body
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Fatal("Error reading response:", err)
+		fmt.Println("Error reading response:", err)
 	}
 
 	responseData, err := helpers.ByteResponse(responseBody)
 	if err != nil {
-		log.Fatal("Error reading response:", err)
+		fmt.Println("Error reading response:", err)
 	}
 
 	return c.Status(resp.StatusCode).JSON(responseData)
@@ -397,7 +580,7 @@ func Auth(c *fiber.Ctx) error {
 
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		fmt.Println("Error loading .env file")
 	}
 
 	// Get environment variables
@@ -407,7 +590,7 @@ func Auth(c *fiber.Ctx) error {
 	// fmt.Println("oauthClientID: ", oauthClientID)
 
 	if oauthClientID == "" || oauthClientSecret == "" {
-		log.Fatal("Missing OAuth credentials")
+		fmt.Println("Missing OAuth credentials")
 	}
 
 	var oauth2Config = &oauth2.Config{
@@ -430,7 +613,7 @@ func OAuthCallback(c *fiber.Ctx) error {
 
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		fmt.Println("Error loading .env file")
 	}
 
 	// Get environment variables
@@ -440,7 +623,7 @@ func OAuthCallback(c *fiber.Ctx) error {
 	// fmt.Println("oauthClientID: ", oauthClientID)
 
 	if oauthClientID == "" || oauthClientSecret == "" {
-		log.Fatal("Missing OAuth credentials")
+		fmt.Println("Missing OAuth credentials")
 	}
 
 	var oauth2Config = &oauth2.Config{
@@ -471,7 +654,7 @@ func OAuthCallback(c *fiber.Ctx) error {
 	// Generate JWT
 	// fmt.Println(user)
 	username := user["email"].(string)
-	tokenString, err := createJWT(username)
+	tokenString, _, err := createJWT(username)
 	if err != nil {
 		fmt.Println("Error:", err.Error())
 		return c.Status(http.StatusInternalServerError).SendString("Could not generate token")
@@ -513,7 +696,7 @@ type Claims struct {
 // 	inputRegister := new(TemplateInputRegister)
 
 // 	if err := c.BodyParser(inputRegister); err != nil {
-// 		log.Println(err.Error())
+// 		fmt.Println(err.Error())
 // 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 // 			Message: "Something went wrong",
 // 			Success: false,
@@ -528,7 +711,7 @@ type Claims struct {
 // 	err := tx.Table("public.user").Where("username = ?", inputRegister.UserName).Find(checkUser).Error
 // 	if err != nil {
 // 		tx.Rollback()
-// 		log.Println(err.Error())
+// 		fmt.Println(err.Error())
 // 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 // 			Message: "Something went wrong",
 // 			Success: false,
@@ -556,7 +739,7 @@ type Claims struct {
 // 	err = tx.Table("public.user").Create(&user).Error
 // 	if err != nil {
 // 		tx.Rollback()
-// 		log.Println(err.Error())
+// 		fmt.Println(err.Error())
 // 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 // 			Message: "Something went wrong",
 // 			Success: false,
@@ -577,7 +760,7 @@ type Claims struct {
 // 	err = tx.Table("hr.person").Create(&person).Error
 // 	if err != nil {
 // 		tx.Rollback()
-// 		log.Println(err.Error())
+// 		fmt.Println(err.Error())
 // 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 // 			Message: "Something went wrong",
 // 			Success: false,
@@ -596,7 +779,7 @@ func RegisterUser(c *fiber.Ctx) error {
 
 	err := godotenv.Load()
 	if err != nil {
-		log.Println(err.Error())
+		fmt.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
@@ -606,7 +789,7 @@ func RegisterUser(c *fiber.Ctx) error {
 	inputRegister := new(TemplateInputRegister)
 
 	if err := c.BodyParser(inputRegister); err != nil {
-		log.Println(err.Error())
+		fmt.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
@@ -621,7 +804,7 @@ func RegisterUser(c *fiber.Ctx) error {
 	err = tx.Table("public.user").Where("username = ?", inputRegister.UserName).Find(checkUser).Error
 	if err != nil {
 		tx.Rollback()
-		log.Println(err.Error())
+		fmt.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
@@ -639,14 +822,14 @@ func RegisterUser(c *fiber.Ctx) error {
 	err = tx.Table("hr.person").Where("email = ? OR ktp = ?", inputRegister.EmailAddress, inputRegister.Nik).Find(checkPerson).Error
 	if err != nil {
 		tx.Rollback()
-		log.Println(err.Error())
+		fmt.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
 		})
 	}
 
-	if len(checkPerson.Email) != 0 {
+	if len(checkPerson.Email) != 0 && checkPerson.Email == inputRegister.EmailAddress {
 		tx.Rollback()
 		return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
 			Message: "Email already exists",
@@ -654,7 +837,7 @@ func RegisterUser(c *fiber.Ctx) error {
 		})
 	}
 
-	if len(checkPerson.Ktp) != 0 {
+	if len(checkPerson.Ktp) != 0 && checkPerson.Ktp == inputRegister.Nik {
 		tx.Rollback()
 		return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
 			Message: "NIK already exists",
@@ -675,7 +858,7 @@ func RegisterUser(c *fiber.Ctx) error {
 	err = tx.Table("public.user").Create(&user).Error
 	if err != nil {
 		tx.Rollback()
-		log.Println(err.Error())
+		fmt.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
@@ -693,21 +876,21 @@ func RegisterUser(c *fiber.Ctx) error {
 	person.UserID = userID
 	person.AppId = 17
 
-	if err := model.ValidateHrPerson(&person); err != nil {
-		// return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-		// 	"message": model.FormatValidationError(err),
-		// 	"success": false,
-		// })
-		return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
-			Message: model.FormatValidationError(err),
-			Success: false,
-		})
-	}
+	// if err := model.ValidateHrPerson(&person); err != nil {
+	// 	// return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+	// 	// 	"message": model.FormatValidationError(err),
+	// 	// 	"success": false,
+	// 	// })
+	// 	return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
+	// 		Message: model.FormatValidationError(err),
+	// 		Success: false,
+	// 	})
+	// }
 
 	err = tx.Table("hr.person").Create(&person).Error
 	if err != nil {
 		tx.Rollback()
-		log.Println(err.Error())
+		fmt.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
@@ -785,7 +968,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 
 	err := godotenv.Load()
 	if err != nil {
-		log.Println(err.Error())
+		fmt.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
@@ -795,7 +978,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 	UpdateProfile := new(TemplateUpdateProfile)
 
 	if err := c.BodyParser(UpdateProfile); err != nil {
-		log.Println(err.Error())
+		fmt.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
@@ -821,7 +1004,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 	// err = tx.Table("public.user").Where("id = ?", UpdateProfile.ID).Updates(user).Error
 	// if err != nil {
 	// 	tx.Rollback()
-	// 	log.Println(err.Error())
+	// 	fmt.Println(err.Error())
 	// 	return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 	// 		Message: "Something went wrong, Failed to update user",
 	// 		Success: false,
@@ -832,7 +1015,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 	// err = tx.Raw("UPDATE hr.person SET full_name = ?, email = ?, phone = ? WHERE user_id = ?", UpdateProfile.FullName, UpdateProfile.EmailAddress, UpdateProfile.PhoneNumber, UpdateProfile.ID).Error
 	if err != nil {
 		tx.Rollback()
-		log.Println(err.Error())
+		fmt.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong, Failed to update user",
 			Success: false,
@@ -854,7 +1037,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 		// })
 
 		tx.Rollback()
-		log.Println(err.Error())
+		fmt.Println(err.Error())
 		return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
 			Message: model.FormatValidationError(err),
 			Success: false,
@@ -863,7 +1046,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 	err = tx.Table("hr.person").Where("user_id = ?", UpdateProfile.ID).Updates(person).Error
 	if err != nil {
 		tx.Rollback()
-		log.Println(err.Error())
+		fmt.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong, Failed to update data",
 			Success: false,
@@ -911,7 +1094,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 													GROUP BY u.id, p.id`, UpdateProfile.ID))
 
 	if err != nil {
-		log.Println(err.Error())
+		fmt.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,

@@ -71,6 +71,8 @@ func Setup(app *fiber.App) {
 	app.Post("/register", controllers.RegisterUser)
 	app.Get("/sendNotif", controllers.SendNotificationFCM)
 	app.Post("/sendEmail", controllers.SendEmail)
+	app.Get("/loginOauth", controllers.LoginOauth)
+	// app.Post("/TestHash", controllers.TestHash)
 
 	authGroup := app.Group("")
 	authGroup.Use(AuthMiddleware)

@@ -31,6 +31,6 @@ func GetSalesmanBy(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(helpers.Response{
 		Message: "Data has been loaded successfully",
 		Success: true,
-		Data:    salesman,
+		Data:    salesman[0],
 	})
 }
