@@ -27,7 +27,7 @@ type TkTransaction struct {
 	UpdatedAt          time.Time `gorm:"column:updated_at;not null;default:now()" json:"updated_at"`
 	SyncKey            string    `gorm:"column:sync_key;default:now()" json:"sync_key"`
 	Note               string    `gorm:"column:note;default:null" json:"note"`
-	StoreID            int64     `gorm:"column:store_id" json:"store_id"`
+	StoreID            int64     `gorm:"column:store_id;default:null" json:"store_id"`
 }
 
 func (*TkTransaction) TableName() string {
