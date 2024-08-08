@@ -378,9 +378,10 @@ func Login(c *fiber.Ctx) error {
 		if len(responseData["data"].([]interface{})) == 0 {
 			responseData["data"] = nil
 		}
+	default:
+		responseData["data"] = nil
 
 	}
-
 	return c.Status(resp.StatusCode).JSON(responseData)
 }
 func Login2(c *fiber.Ctx) error {
@@ -845,6 +846,14 @@ func RegisterUser(c *fiber.Ctx) error {
 		})
 	}
 
+	if len(checkPerson.Phone) != 0 && checkPerson.Phone == inputRegister.PhoneNumber {
+		tx.Rollback()
+		return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
+			Message: "Phone already exists",
+			Success: false,
+		})
+	}
+
 	user.FullName = inputRegister.FullName
 	user.Username = inputRegister.UserName
 
@@ -903,11 +912,18 @@ func RegisterUser(c *fiber.Ctx) error {
 														u.id,
 														u.full_name as name,
 														u.username,
+														u.profile_photo,
+														p.email,
+														p.phone,
 														ARRAY[]::varchar[] as permission,
 														NULL as userinfo
 													FROM public.user u
+													LEFT JOIN customer c
+														ON u.id = c.user_id
+													LEFT JOIN hr.person p
+														ON u.id = p.user_id
 													WHERE u.id = %v
-													GROUP BY u.id`, userID))
+													GROUP BY u.id, p.id`, userID))
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",

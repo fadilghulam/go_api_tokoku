@@ -188,7 +188,7 @@ func send(to, subject, title, otp, body string) error {
 	// }
 
 	// Load and parse the HTML template
-	tmpl, err := template.ParseFiles("views/email_template2.html")
+	tmpl, err := template.ParseFiles("views/email_template3.html")
 	if err != nil {
 		return err
 	}

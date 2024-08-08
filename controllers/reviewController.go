@@ -114,6 +114,12 @@ func GetComplaints(c *fiber.Ctx) error {
 		})
 	}
 
+	for i := range complaints {
+		if complaints[i].Other != nil && *complaints[i].Other == "" {
+			complaints[i].Other = nil
+		}
+	}
+
 	return c.Status(fiber.StatusOK).JSON(helpers.ResponseDataMultiple{
 		Message: "Success",
 		Success: true,

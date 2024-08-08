@@ -8,6 +8,55 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+func GetCountTransactions(c *fiber.Ctx) error {
+
+	customerId := c.Query("id")
+
+	result, err := helpers.ExecuteQuery(fmt.Sprintf(`SELECT JSON_AGG(data.count_data) as count_data FROM (
+														SELECT --ts.name as transaction_state, COUNT(tr.id) as count_data,
+														JSONB_BUILD_OBJECT(ts.name, COUNT(tr.id)) as count_data
+														FROM tk.transaction_state ts
+														LEFT JOIN tk.transaction tr
+															ON ts.id = tr.transaction_state_id
+															AND tr.customer_id = %s
+														GROUP BY ts.id
+														ORDER BY ts.id
+													) data`, customerId))
+
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	if len(result) == 0 {
+		return c.Status(fiber.StatusOK).JSON(helpers.Response{
+			Message: "Data not found",
+			Success: true,
+			Data:    nil,
+		})
+	}
+
+	flattenedResult := make(map[string]int)
+	for _, item := range result {
+		for _, value := range item {
+			for _, val := range value.([]interface{}) {
+				for k, v := range val.(map[string]interface{}) {
+					flattenedResult[k] = int(v.(float64))
+				}
+			}
+		}
+	}
+
+	return c.Status(fiber.StatusOK).JSON(helpers.Response{
+		Message: "Success",
+		Success: true,
+		Data:    flattenedResult,
+	})
+
+}
+
 func GetTransactions(c *fiber.Ctx) error {
 
 	customerId := c.Query("id")
@@ -66,7 +115,12 @@ func GetTransactions(c *fiber.Ctx) error {
 					'rating', rev.rating,
 					'description', rev.description,
 					'photo', rev.photo
-				) as review
+				) as review,
+				comp.id as complaint_id,
+				JSONB_BUILD_OBJECT(
+					 'description', comp.description,
+					 'photo', comp.image
+				) as complaint
 			FROM tk.transaction_detail trd
 			JOIN tk.transaction tr
 				ON trd.transaction_id = tr.id
@@ -88,8 +142,11 @@ func GetTransactions(c *fiber.Ctx) error {
 			LEFT JOIN tk.review rev
 				ON tr.id = rev.order_id
 				AND rev.order_item_id IS NULL
+			LEFT JOIN tk.complaints comp
+				ON tr.id = comp.transaction_id
+				AND comp.transaction_item_id IS NULL
 			WHERE tr.customer_id = %s AND ts.name = UPPER('%s')
-			GROUP BY trd.transaction_id, tr.id, c.id, s.id, rev.id
+			GROUP BY trd.transaction_id, tr.id, c.id, s.id, rev.id, comp.id
 		)
 		
 		SELECT LOWER(name) as name,
@@ -104,7 +161,8 @@ func GetTransactions(c *fiber.Ctx) error {
 						'customer', trd.customer,
 						'invoice', trd.invoice,
 						'note', tr.note,
-						'review', CASE WHEN trd.rating IS NULL THEN NULL ELSE trd.review END
+						'review', CASE WHEN trd.rating IS NULL THEN NULL ELSE trd.review END,
+						'complaints', CASE WHEN trd.complaint_id IS NULL THEN NULL ELSE trd.complaint END
 					) ORDER BY tr.transaction_date DESC
 				) FILTER (WHERE tr.id IS NOT NULL) as datas
 		FROM tk.transaction_state ts

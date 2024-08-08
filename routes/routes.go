@@ -72,6 +72,8 @@ func Setup(app *fiber.App) {
 	app.Get("/sendNotif", controllers.SendNotificationFCM)
 	app.Post("/sendEmail", controllers.SendEmail)
 	app.Get("/loginOauth", controllers.LoginOauth)
+	app.Post("/quickCheckout", controllers.QuickCheckout)
+
 	// app.Post("/TestHash", controllers.TestHash)
 
 	authGroup := app.Group("")
@@ -94,6 +96,7 @@ func Setup(app *fiber.App) {
 
 	//Transaction routes
 	authGroup.Get("/transactions", controllers.GetTransactions)
+	authGroup.Get("/getCountTransactions", controllers.GetCountTransactions)
 	authGroup.Get("/points", controllers.GetPointsCustomer)
 	authGroup.Get("/pointsHistory", controllers.GetPointsHistory)
 
@@ -103,7 +106,7 @@ func Setup(app *fiber.App) {
 	authGroup.Put("/updateCart", controllers.UpdateCart)
 	authGroup.Delete("/deleteCart", controllers.DeleteCart)
 	authGroup.Post("/checkoutCart", controllers.CheckoutCart)
-	authGroup.Post("/quickCheckout", controllers.QuickCheckout)
+	// authGroup.Post("/quickCheckout", controllers.QuickCheckout)
 
 	//Voucher routes
 	authGroup.Post("/addVoucher", controllers.InsertVoucher)

@@ -604,23 +604,27 @@ func CheckoutCart(c *fiber.Ctx) error {
 
 func QuickCheckout(c *fiber.Ctx) error {
 
+	type product struct {
+		Quantity int64   `json:"quantity"`
+		Point    int16   `json:"point"`
+		ProdukId int32   `json:"produkId"`
+		Harga    float64 `json:"harga"`
+		Diskon   float64 `json:"diskon"`
+	}
+
 	type templateQuickCheckout struct {
-		CustomerID int64   `json:"customerId"`
-		Provinsi   string  `json:"prov"`
-		Kabupaten  string  `json:"kab"`
-		Kecamatan  string  `json:"kec"`
-		Kelurahan  string  `json:"kel"`
-		Note       string  `json:"note"`
-		SrID       int64   `json:"srId"`
-		RayonID    int64   `json:"rayonId"`
-		BranchID   int64   `json:"branchId"`
-		VoucherID  int64   `json:"voucherId"`
-		ProdukID   int32   `json:"produkId"`
-		Quantity   int64   `json:"quantity"`
-		TotalPrice int64   `json:"totalPrice"`
-		Point      int16   `json:"point"`
-		Harga      float64 `json:"harga"`
-		Diskon     float64 `json:"diskon"`
+		CustomerID int64     `json:"customerId"`
+		Provinsi   string    `json:"prov"`
+		Kabupaten  string    `json:"kab"`
+		Kecamatan  string    `json:"kec"`
+		Kelurahan  string    `json:"kel"`
+		Note       string    `json:"note"`
+		SrID       int64     `json:"srId"`
+		RayonID    int64     `json:"rayonId"`
+		BranchID   int64     `json:"branchId"`
+		VoucherID  int64     `json:"voucherId"`
+		TotalPrice int64     `json:"totalPrice"`
+		Products   []product `json:"product"`
 	}
 
 	requestBody := new(templateQuickCheckout)
@@ -633,6 +637,29 @@ func QuickCheckout(c *fiber.Ctx) error {
 			Success: false,
 		})
 	}
+
+	// fmt.Println(requestBody.Products)
+
+	// for i := 0; i < len(requestBody.Products); i++ {
+	// 	fmt.Println(requestBody.Products[i].Point)
+	// 	// transactionDetail := model.TkTransactionDetail{
+	// 	// 	TransactionID: int64(transactionID),
+	// 	// 	ProdukID:      int64(requestBody.Products[i].ProdukId),
+	// 	// 	Qty:           requestBody.Products[i].Quantity,
+	// 	// 	Harga:         requestBody.Products[i].Harga,
+	// 	// 	Diskon:        requestBody.Products[i].Diskon,
+	// 	// 	Point:         int64(requestBody.Products[i].Point),
+	// 	// }
+
+	// 	// if err := tx.Create(&transactionDetail).Error; err != nil {
+	// 	// 	tx.Rollback()
+	// 	// 	log.Println("failed to insert transaction: ", err.Error())
+	// 	// 	return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+	// 	// 		Message: "Something went wrong",
+	// 	// 		Success: false,
+	// 	// 	})
+	// 	// }
+	// }
 
 	tx := db.DB.Begin()
 
@@ -671,23 +698,25 @@ func QuickCheckout(c *fiber.Ctx) error {
 
 	transactionID = transaction.ID
 
-	transactionDetail := model.TkTransactionDetail{
-		TransactionID: int64(transactionID),
-		ProdukID:      int64(requestBody.ProdukID),
-		Qty:           requestBody.Quantity,
-		Harga:         requestBody.Harga,
-		Diskon:        requestBody.Diskon,
-		Note:          requestBody.Note,
-		Point:         int64(requestBody.Point),
-	}
+	for i := 0; i < len(requestBody.Products); i++ {
+		fmt.Println(requestBody.Products[i].Quantity)
+		transactionDetail := model.TkTransactionDetail{
+			TransactionID: int64(transactionID),
+			ProdukID:      int64(requestBody.Products[i].ProdukId),
+			Qty:           requestBody.Products[i].Quantity,
+			Harga:         requestBody.Products[i].Harga,
+			Diskon:        requestBody.Products[i].Diskon,
+			Point:         int64(requestBody.Products[i].Point),
+		}
 
-	if err := tx.Create(&transactionDetail).Error; err != nil {
-		tx.Rollback()
-		log.Println("failed to insert transaction: ", err.Error())
-		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
-			Message: "Something went wrong",
-			Success: false,
-		})
+		if err := tx.Create(&transactionDetail).Error; err != nil {
+			tx.Rollback()
+			log.Println("failed to insert transaction: ", err.Error())
+			return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+				Message: "Something went wrong",
+				Success: false,
+			})
+		}
 	}
 
 	if requestBody.VoucherID != 0 {
@@ -714,4 +743,5 @@ func QuickCheckout(c *fiber.Ctx) error {
 			Success: true,
 		})
 	}
+	// return nil
 }

@@ -15,13 +15,18 @@ func RefreshUser(c *fiber.Ctx) error {
 														u.id,
 														u.full_name as name,
 														u.username,
+														u.profile_photo,
+														p.email,
+														p.phone,
 														ARRAY[]::varchar[] as permission,
-														JSONB_AGG(c.*) as userinfo
+														JSONB_AGG(c.*) as "userInfo"
 													FROM public.user u
-													JOIN customer c
+													LEFT JOIN customer c
 														ON u.id = c.user_id
+													LEFT JOIN hr.person p
+														ON u.id = p.user_id
 													WHERE u.id = %v
-													GROUP BY u.id`, userId))
+													GROUP BY u.id, p.id`, userId))
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
@@ -31,6 +36,6 @@ func RefreshUser(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(helpers.Response{
 		Message: "Success",
 		Success: true,
-		Data:    datas,
+		Data:    datas[0],
 	})
 }
