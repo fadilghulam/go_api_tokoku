@@ -25,7 +25,9 @@ type TkTransactionItem struct {
 	CreatedAt          time.Time `gorm:"column:created_at;not null;default:now()" json:"created_at"`
 	UpdatedAt          time.Time `gorm:"column:updated_at;not null;default:now()" json:"updated_at"`
 	SyncKey            string    `gorm:"column:sync_key;default:now()" json:"sync_key"`
-	Note               string    `gorm:"column:note" json:"note"`
+	Note               string    `gorm:"column:note;defaul:null" json:"note"`
+	EstimateDate       time.Time `gorm:"column:estimate_date;default:null" json:"estimate_date"`
+	DeliveredDate      time.Time `gorm:"column:delivered_date;default:null" json:"delivered_date"`
 }
 
 func (*TkTransactionItem) TableName() string {
