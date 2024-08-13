@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"fmt"
+	"strconv"
 
 	"go_api_tokoku/helpers"
 
@@ -215,6 +216,77 @@ func GetProdukDetail(c *fiber.Ctx) error {
 	})
 }
 
+func GetHargaProduk(c *fiber.Ctx) error {
+	type produk struct {
+		Id  int `json:"id"`
+		Qty int `json:"qty"`
+	}
+
+	type FormValue struct {
+		CustomerId int      `json:"customerId"`
+		Products   []produk `json:"products"`
+	}
+
+	requestBody := new(FormValue)
+
+	err := c.BodyParser(requestBody)
+	if err != nil {
+		fmt.Println(err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something's wrong with your input",
+			Success: false,
+		})
+	}
+
+	var whereProdukId string
+	for i := 0; i < len(requestBody.Products); i++ {
+		tempId := strconv.Itoa(requestBody.Products[i].Id)
+		whereProdukId += tempId + ","
+	}
+
+	results, err := helpers.ExecuteQuery(fmt.Sprintf(
+		`SELECT p.id,
+				p.code,
+				p.name,
+				p.foto as image,
+				CASE WHEN rh.harga IS NULL THEN 0 ELSE 1 END as is_available,
+				COALESCE(rh.harga, 0) as harga,
+				COALESCE(dis.nominal,0) as discount
+			FROM customer c
+			JOIN salesman s
+				ON c.salesman_id = s.id
+			JOIN produk p
+				ON p.id IN (%s)
+			LEFT JOIN ref_harga_master rhm
+				ON COALESCE(c.branch_id,s.branch_id) = rhm.branch_id
+				AND CURRENT_DATE BETWEEN rhm.date_start AND COALESCE(rhm.date_end, CURRENT_DATE)
+			LEFT JOIN ref_harga rh
+				ON rhm.id = rh.ref_harga_master_id
+				AND c.tipe = rh.customer_tipe
+				AND s.tipe_salesman = rh.salesman_tipe
+				AND p.id = rh.produk_id
+			LEFT JOIN tk.discount dis
+				ON p.id = dis.produk_id
+				AND CURRENT_DATE BETWEEN dis.date_start AND COALESCE(dis.date_end, CURRENT_DATE)
+				AND COALESCE(c.branch_id,s.branch_id) = dis.branch_id
+				AND c.tipe = dis.customer_type_id
+			WHERE c.id = %v
+			ORDER BY p.order`, whereProdukId, requestBody.CustomerId))
+
+	if err != nil {
+		fmt.Println(err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(helpers.ResponseDataMultiple{
+		Message: "Data has been loaded successfully",
+		Success: true,
+		Data:    results,
+	})
+}
 func TestRoute(c *fiber.Ctx) error {
 	return c.SendString("Hello, World!")
 }

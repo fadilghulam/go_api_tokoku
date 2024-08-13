@@ -13,7 +13,7 @@ type TkTransactionDetail struct {
 	Diskon        float64   `gorm:"column:diskon;default:0" json:"diskon"`
 	Condition     string    `gorm:"column:condition;default:null" json:"condition"`
 	Pita          string    `gorm:"column:pita;default:null" json:"pita"`
-	SyncKey       string    `gorm:"column:sync_key;default:CURRENT_DATE" json:"sync_key"`
+	SyncKey       string    `gorm:"column:sync_key;default:now()" json:"sync_key"`
 	CreatedAt     time.Time `gorm:"column:created_at;not null;default:now()" json:"created_at"`
 	UpdatedAt     time.Time `gorm:"column:updated_at;not null;default:now()" json:"updated_at"`
 	Note          string    `gorm:"column:note;default:null" json:"note"`

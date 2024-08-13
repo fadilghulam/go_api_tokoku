@@ -16,6 +16,7 @@ import (
 func GetItemsExchange(c *fiber.Ctx) error {
 
 	customerId := c.Query("customerId")
+	itemId := c.Query("itemId")
 
 	var query string
 	if customerId == "" {
@@ -39,6 +40,11 @@ func GetItemsExchange(c *fiber.Ctx) error {
 								WHERE now() BETWEEN ie.date_start AND COALESCE(ie.date_end, now())		
 		`
 	} else {
+
+		var tempQuery string
+		if itemId != "" {
+			tempQuery = "AND i.id = " + itemId
+		}
 		query = fmt.Sprintf(`WITH exchanged as (SELECT exchange_id, coalesce(count(id),0) as counts 
 										FROM tk.customer_point_history 
 										WHERE customer_id = %v 
@@ -65,7 +71,7 @@ func GetItemsExchange(c *fiber.Ctx) error {
 									ON ie.item_id = i.id
 								LEFT JOIN exchanged ex
 									ON ie.id = ex.exchange_id
-								WHERE now() BETWEEN ie.date_start AND COALESCE(ie.date_end, now())`, customerId)
+								WHERE now() BETWEEN ie.date_start AND COALESCE(ie.date_end, now()) %s`, customerId, tempQuery)
 	}
 
 	result, err := helpers.ExecuteQuery(query)
@@ -396,7 +402,7 @@ func CheckOutCartItem(c *fiber.Ctx) error {
 
 	tx := db.DB.Begin()
 
-	getCartItems := fmt.Sprintf(`SELECT ci.id||'' as id, ie.item_id 
+	getCartItems := fmt.Sprintf(`SELECT ci.id||'' as id, ie.item_id, ci.point::smallint
 								FROM tk.cart_item ci
 								JOIN tk.item_exchange ie
 									ON ci.item_exchange_id = ie.id
@@ -472,22 +478,24 @@ func CheckOutCartItem(c *fiber.Ctx) error {
 			}
 		}
 
-		customerExchangedPoints := fmt.Sprintf(`SELECT SUM(point) as point FROM tk.transaction_item_detail WHERE transaction_item_id = %v`, transactionID)
+		// customerExchangedPoints := fmt.Sprintf(`SELECT SUM(point) as point FROM tk.transaction_item_detail WHERE transaction_item_id = %v`, transactionID)
 
-		point, err := helpers.ExecuteQuery(customerExchangedPoints)
-		if err != nil {
-			tx.Rollback()
-			log.Println("failed to get customer point: ", err.Error())
-			return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
-				Message: "Something went wrong",
-				Success: false,
-			})
-		}
+		// point, err := helpers.ExecuteQuery(customerExchangedPoints)
+		// if err != nil {
+		// 	tx.Rollback()
+		// 	log.Println("failed to get customer point: ", err.Error())
+		// 	return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+		// 		Message: "Something went wrong",
+		// 		Success: false,
+		// 	})
+		// }
+
+		// if point[0]["point"] != nil {
 
 		customerPointHistory := model.CustomerPointHistory{
 			CustomerId: helpers.ConvertStringToInt64(customerId),
 			ExchangeId: transactionID,
-			Point:      point[0]["point"].(int16),
+			Point:      int16(result[i]["point"].(float64)),
 			Type:       "EXCHANGE",
 		}
 
@@ -499,6 +507,7 @@ func CheckOutCartItem(c *fiber.Ctx) error {
 				Success: false,
 			})
 		}
+		// }
 	}
 
 	deleteQuery := fmt.Sprintf("DELETE FROM tk.cart_item WHERE id IN (%v)", cartIds)

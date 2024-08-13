@@ -91,6 +91,7 @@ func Setup(app *fiber.App) {
 
 	//Products routes
 	authGroup.Get("/produkTerkini", controllers.GetProdukTerkini)
+	authGroup.Get("/getHargaProduk", controllers.GetHargaProduk)
 	authGroup.Get("/produkDetail", controllers.GetProdukDetail)
 	authGroup.Get("/TestRoute", controllers.TestRoute)
 

@@ -119,7 +119,9 @@ func GetTransactions(c *fiber.Ctx) error {
 				comp.id as complaint_id,
 				JSONB_BUILD_OBJECT(
 					 'description', comp.description,
-					 'photo', comp.image
+					 'photo', comp.image,
+					 'status', comp.status,
+					 'feedback', comp.feedback
 				) as complaint
 			FROM tk.transaction_detail trd
 			JOIN tk.transaction tr
@@ -216,7 +218,8 @@ func GetPointsCustomer(c *fiber.Ctx) error {
 	results, err := helpers.ExecuteQuery(fmt.Sprintf(
 		`SELECT cph.customer_id,
 				SUM(CASE WHEN cph.exchange_id IS NOT NULL THEN cph.point ELSE 0 END) as total_point_digunakan,
-				SUM(CASE WHEN cph.transaction_id IS NOT NULL THEN cph.point ELSE 0 END) as total_point_terkumpul
+				SUM(CASE WHEN cph.transaction_id IS NOT NULL THEN cph.point ELSE 0 END) as total_point_terkumpul,
+				(SUM(CASE WHEN cph.transaction_id IS NOT NULL THEN cph.point ELSE 0 END) - SUM(CASE WHEN cph.exchange_id IS NOT NULL THEN cph.point ELSE 0 END)) as total_point
 		FROM tk.customer_point_history cph
 		LEFT JOIN tk.transaction t
 			ON cph.transaction_id = t.id

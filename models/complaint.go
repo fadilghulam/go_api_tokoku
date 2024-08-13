@@ -50,6 +50,8 @@ type Complaints struct {
 	CreatedAt         time.Time   `gorm:"column:created_at;not null;default:now()" json:"created_at"`
 	UpdatedAt         time.Time   `gorm:"column:updated_at;not null;default:now()" json:"updated_at"`
 	Other             *string     `gorm:"column:other;default:null" json:"other"`
+	Status            *string     `gorm:"column:status;default:null" json:"status"`
+	Feedback          *string     `gorm:"column:feedback;default:null" json:"feedback"`
 }
 
 func (*Complaints) TableName() string {

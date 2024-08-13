@@ -699,7 +699,7 @@ func QuickCheckout(c *fiber.Ctx) error {
 	transactionID = transaction.ID
 
 	for i := 0; i < len(requestBody.Products); i++ {
-		fmt.Println(requestBody.Products[i].Quantity)
+		// fmt.Println(requestBody.Products[i].Quantity)
 		transactionDetail := model.TkTransactionDetail{
 			TransactionID: int64(transactionID),
 			ProdukID:      int64(requestBody.Products[i].ProdukId),
