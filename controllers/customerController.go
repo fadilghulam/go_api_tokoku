@@ -33,6 +33,14 @@ func RefreshUser(c *fiber.Ctx) error {
 			Success: false,
 		})
 	}
+
+	if len(datas) == 0 {
+		return c.Status(fiber.StatusNotFound).JSON(helpers.ResponseWithoutData{
+			Message: "User not found",
+			Success: false,
+		})
+	}
+
 	return c.Status(fiber.StatusOK).JSON(helpers.Response{
 		Message: "Success",
 		Success: true,

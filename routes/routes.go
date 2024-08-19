@@ -124,7 +124,7 @@ func Setup(app *fiber.App) {
 
 	//Transaction Item routes
 	authGroup.Get("/getTransactionItem", controllers.GetTransactionsItem)
-	authGroup.Get("/getCountTransactionsItem", controllers.GetCountTransactionsItem)
+	authGroup.Get("/getCountTransactionItem", controllers.GetCountTransactionsItem)
 
 	//Advertisement routes
 	authGroup.Get("/getAdvertisement", controllers.GetAdvertisement)

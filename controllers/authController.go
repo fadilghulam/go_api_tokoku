@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -685,6 +686,7 @@ type TemplateUpdateProfile struct {
 	EmailAddress string `json:"emailAddress"`
 	PhoneNumber  string `json:"phoneNumber"`
 	Password     string `json:"password"`
+	Ktp          string `json:"ktp"`
 }
 type Claims struct {
 	ID       int64  `json:"id"`
@@ -984,7 +986,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 
 	err := godotenv.Load()
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
@@ -994,7 +996,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 	UpdateProfile := new(TemplateUpdateProfile)
 
 	if err := c.BodyParser(UpdateProfile); err != nil {
-		fmt.Println(err.Error())
+		log.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
@@ -1020,7 +1022,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 	// err = tx.Table("public.user").Where("id = ?", UpdateProfile.ID).Updates(user).Error
 	// if err != nil {
 	// 	tx.Rollback()
-	// 	fmt.Println(err.Error())
+	// 	log.Println(err.Error())
 	// 	return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 	// 		Message: "Something went wrong, Failed to update user",
 	// 		Success: false,
@@ -1031,7 +1033,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 	// err = tx.Raw("UPDATE hr.person SET full_name = ?, email = ?, phone = ? WHERE user_id = ?", UpdateProfile.FullName, UpdateProfile.EmailAddress, UpdateProfile.PhoneNumber, UpdateProfile.ID).Error
 	if err != nil {
 		tx.Rollback()
-		fmt.Println(err.Error())
+		log.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong, Failed to update user",
 			Success: false,
@@ -1040,11 +1042,12 @@ func UpdateProfile(c *fiber.Ctx) error {
 
 	// userID := user.ID
 
-	var person model.HrPerson
+	var person, checkPerson model.HrPerson
 
 	person.FullName = UpdateProfile.FullName
 	person.Email = UpdateProfile.EmailAddress
 	person.Phone = UpdateProfile.PhoneNumber
+	person.Ktp = UpdateProfile.Ktp
 
 	if err := model.ValidateHrPerson(&person); err != nil {
 		// return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -1053,16 +1056,51 @@ func UpdateProfile(c *fiber.Ctx) error {
 		// })
 
 		tx.Rollback()
-		fmt.Println(err.Error())
+		log.Println(err.Error())
 		return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
 			Message: model.FormatValidationError(err),
 			Success: false,
 		})
 	}
+
+	err = tx.Where("email = ? OR ktp = ?", UpdateProfile.EmailAddress, UpdateProfile.Ktp).Find(&checkPerson).Error
+	if err != nil {
+		tx.Rollback()
+		log.Println(err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	if len(checkPerson.Email) != 0 && checkPerson.Email == UpdateProfile.EmailAddress {
+		tx.Rollback()
+		return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
+			Message: "Email already exists",
+			Success: false,
+		})
+	}
+
+	if len(checkPerson.Ktp) != 0 && checkPerson.Ktp == UpdateProfile.Ktp {
+		tx.Rollback()
+		return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
+			Message: "NIK already exists",
+			Success: false,
+		})
+	}
+
+	if len(checkPerson.Phone) != 0 && checkPerson.Phone == UpdateProfile.PhoneNumber {
+		tx.Rollback()
+		return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
+			Message: "Phone already exists",
+			Success: false,
+		})
+	}
+
 	err = tx.Table("hr.person").Where("user_id = ?", UpdateProfile.ID).Updates(person).Error
 	if err != nil {
 		tx.Rollback()
-		fmt.Println(err.Error())
+		log.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong, Failed to update data",
 			Success: false,
@@ -1078,6 +1116,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 														u.profile_photo,
 														p.email,
 														p.phone,
+														p.ktp,
 														ARRAY[]::varchar[] as permission,
 														CASE WHEN MAX(c.id) IS NULL THEN '[]' ELSE 
 														JSONB_AGG(
@@ -1110,7 +1149,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 													GROUP BY u.id, p.id`, UpdateProfile.ID))
 
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
