@@ -1,0 +1,138 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+    <script>
+    //    const socket = new WebSocket('wss://api.tokoku.pt-bks.com/ws/refreshUserSocket?userId=401');
+       const socket = new WebSocket('ws://localhost:4001/testsocket');
+       
+       socket.on('connect', () => {
+            console.log('Connected to the server');
+            socket.emit('message', 'Hello from the client!');
+        });
+
+// Event listeners
+socket.onopen = function(event) {
+    console.log('Connected to WebSocket server');
+};
+
+socket.onmessage = function(event) {
+    console.log('Message from server ', event.data);
+};
+
+socket.onerror = function(error) {
+    console.error('WebSocket Error: ', error);
+};
+
+socket.onclose = function(event) {
+    console.log('WebSocket connection closed: ', event);
+};
+
+    </script>
+</html> -->
+
+<!-- <!DOCTYPE html>
+<html>
+<head>
+    <title>Socket.IO Client</title>
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>Socket.IO Client</h1>
+    <script>
+        // const socket = io('localhost:4001/testsocket');
+        const socket = io('localhost:4001/testsocket2', {
+            transports: ['websocket'],
+            auth: {
+                token: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6IjIwOTciLCJ1c2VybmFtZSI6ImN1c3RvbWVyMDAxIiwiaWF0IjoxNzI0Mzc5NTQ1LCJleHAiOjE3MjY5NzE1NDV9.iFDWrBSeqCu5ftZ6z3FXJ0fg9_O7penbtkcqRo_CQ2s' // Add your token here
+            }
+        });
+
+        socket.on('connect', () => {
+            console.log('Connected to the server');
+            socket.emit('message', 'Hello from the client!');
+        });
+
+        socket.on('message', (msg) => {
+            console.log('Received message:', msg);
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from the server');
+        });
+
+        socket.on('error', (error) => {
+            console.error('Error:', error);
+        });
+    </script>
+</body>
+</html> -->
+
+<!-- <!DOCTYPE html>
+<html>
+<head>
+    <title>Socket.IO Client</title>
+     Load the Socket.IO client library from a CDN 
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // Connect to the Socket.IO server
+            const socket = io('localhost:4001', {
+            transports: ['websocket'],
+            auth: {
+                token: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6IjIwOTciLCJ1c2VybmFtZSI6ImN1c3RvbWVyMDAxIiwiaWF0IjoxNzI0Mzc5NTQ1LCJleHAiOjE3MjY5NzE1NDV9.iFDWrBSeqCu5ftZ6z3FXJ0fg9_O7penbtkcqRo_CQ2s' // Add your token here
+            }
+        });
+
+            // Listen for the 'connect' event
+            socket.on("connect", function() {
+                console.log("Connected to server");
+                // Emit a 'chat message' event to the server
+                socket.emit("chat message", "Hello, server!");
+            });
+
+            // Listen for 'message' events from the server
+            socket.on("message", function(msg) {
+                console.log("Received message from server:", msg);
+            });
+
+            // Listen for 'chat message' events from the server
+            socket.on("chat message", function(msg) {
+                console.log("Chat message received:", msg);
+            });
+        });
+    </script>
+</head>
+<body>
+    <h1>Socket.IO Client</h1>
+</body>
+</html> -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>Go WebSocket Tutorial</title>
+  </head>
+  <body>
+    <h2>Hello World</h2>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.1.1/socket.io.js"></script>
+    <script>
+    //   const socket = io("http://localhost:4001/SocketIOHandler2");
+    const socket = io('localhost:4001/SocketIOHandler2', {
+            transports: ['websocket'],
+            auth: {
+                token: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6IjIwOTciLCJ1c2VybmFtZSI6ImN1c3RvbWVyMDAxIiwiaWF0IjoxNzI0Mzc5NTQ1LCJleHAiOjE3MjY5NzE1NDV9.iFDWrBSeqCu5ftZ6z3FXJ0fg9_O7penbtkcqRo_CQ2s' // Add your token here
+            }
+        });
+      
+      socket.emit("chat message", "hello world!") //emitting the message from 1 client
+
+      //all the client reading on that event will get that message once broadcasted
+      socket.on("chat message", (msg) => {
+        console.log("Client side: " + msg)
+      })
+    </script>
+  </body>
+</html>

@@ -508,6 +508,38 @@ func CheckoutCart(c *fiber.Ctx) error {
 		})
 	}
 
+	getEstimateDate, err := helpers.ExecuteQuery(fmt.Sprintf(`WITH get_estimated as (
+																SELECT DISTINCT ON (sq.estimated_date) DATE(sq.estimated_date) as estimated_date--, CURRENT_DATE + '2 week'::interval
+																FROM (
+																SELECT r.id, r.day, r.mode, r.weekly, 
+																CURRENT_DATE, 
+																DATE_PART('week', CURRENT_DATE) AS woy, 
+																DATE(date_trunc('week', CURRENT_DATE)) + (r.day-1||' day')::INTERVAL  AS estimated_date
+																FROM rute_customer rc
+																JOIN rute r
+																	ON rc.rute_id = r.id
+																WHERE rc.customer_id = %s AND r.is_aktif = 1 
+																AND r.mode = (CASE WHEN MOD(DATE_PART('week', CURRENT_DATE)::INTEGER,2) = 0 THEN 'genap' ELSE 'ganjil' END)
+																AND MOD(DATE_PART('week', CURRENT_DATE)::INTEGER,r.weekly) = 0
+																ORDER BY r.day
+																) sq
+																ORDER BY sq.estimated_date
+																LIMIT 1
+																)
+
+																SELECT DATE(estimated_date) as estimated_date FROM get_estimated
+																UNION
+																SELECT DATE(CURRENT_DATE + '2 week'::interval) as estimated_date`, customer_id))
+
+	if err != nil {
+		tx.Rollback()
+		log.Println("failed to get estimate date, ", err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
 	for i := 0; i < len(result); i++ {
 
 		var transactionID int
@@ -522,6 +554,7 @@ func CheckoutCart(c *fiber.Ctx) error {
 			StoreID:            helpers.ConvertStringToInt64(result[i]["store_id"].(string)),
 			Note:               note,
 			Kelurahan:          kel,
+			EstimateDate:       getEstimateDate[0]["estimated_date"].(time.Time),
 			// StoreID:            result[i]["store_id"].(int64),
 		}
 

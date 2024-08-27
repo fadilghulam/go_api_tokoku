@@ -23,7 +23,7 @@ func GetItemsExchange(c *fiber.Ctx) error {
 		query = `SELECT ie.id,
 									ie.point,
 									DATE(ie.date_start) as date_start,
-									DATE(ie.date_end) as date_end,	
+									COALESCE(DATE(ie.date_end), CURRENT_DATE) as date_end,	
 									ie.max_exchange,
 									ie.about,
 									ie.detail,
@@ -40,10 +40,9 @@ func GetItemsExchange(c *fiber.Ctx) error {
 								WHERE now() BETWEEN ie.date_start AND COALESCE(ie.date_end, now())		
 		`
 	} else {
-
 		var tempQuery string
 		if itemId != "" {
-			tempQuery = "AND i.id = " + itemId
+			tempQuery = "AND ie.id = " + itemId
 		}
 		query = fmt.Sprintf(`WITH exchanged as (SELECT exchange_id, coalesce(count(id),0) as counts 
 										FROM tk.customer_point_history 
@@ -88,7 +87,6 @@ func GetItemsExchange(c *fiber.Ctx) error {
 		Data:    result,
 	})
 }
-
 func InsertCartItem(c *fiber.Ctx) error {
 
 	cartItem := new(model.CartItem)
@@ -133,8 +131,8 @@ func GetCartItem(c *fiber.Ctx) error {
 								ci.item_exchange_id,
 								ci.point,
 								ci.qty,
-								ie.date_start,
-								ie.date_end,
+								DATE(ie.date_start) as date_start,
+								COALESCE(DATE(ie.date_end), CURRENT_DATE) as date_end,	
 								JSONB_BUILD_OBJECT(
 									'id', i.id,
 									'name', i.name,
@@ -419,6 +417,38 @@ func CheckOutCartItem(c *fiber.Ctx) error {
 		})
 	}
 
+	getEstimateDate, err := helpers.ExecuteQuery(fmt.Sprintf(`WITH get_estimated as (
+																SELECT DISTINCT ON (sq.estimated_date) DATE(sq.estimated_date) as estimated_date--, CURRENT_DATE + '2 week'::interval
+																FROM (
+																SELECT r.id, r.day, r.mode, r.weekly, 
+																CURRENT_DATE, 
+																DATE_PART('week', CURRENT_DATE) AS woy, 
+																DATE(date_trunc('week', CURRENT_DATE)) + (r.day-1||' day')::INTERVAL  AS estimated_date
+																FROM rute_customer rc
+																JOIN rute r
+																	ON rc.rute_id = r.id
+																WHERE rc.customer_id = %s AND r.is_aktif = 1 
+																AND r.mode = (CASE WHEN MOD(DATE_PART('week', CURRENT_DATE)::INTEGER,2) = 0 THEN 'genap' ELSE 'ganjil' END)
+																AND MOD(DATE_PART('week', CURRENT_DATE)::INTEGER,r.weekly) = 0
+																ORDER BY r.day
+																) sq
+																ORDER BY sq.estimated_date
+																LIMIT 1
+															)
+
+															SELECT DATE(estimated_date) as estimated_date FROM get_estimated
+															UNION
+															SELECT DATE(CURRENT_DATE + '2 week'::interval) as estimated_date`, customerId))
+
+	if err != nil {
+		tx.Rollback()
+		log.Println("failed to get estimate date, ", err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
 	// fmt.Println(result[0]["id"].(string))
 
 	for i := 0; i < len(result); i++ {
@@ -434,6 +464,7 @@ func CheckOutCartItem(c *fiber.Ctx) error {
 			Kecamatan:          kec,
 			Kelurahan:          kel,
 			Note:               note,
+			EstimateDate:       getEstimateDate[0]["estimated_date"].(time.Time),
 		}
 
 		if sr_id != "" {
@@ -538,9 +569,36 @@ func GetTransactionsItem(c *fiber.Ctx) error {
 
 	customerId := c.Query("id")
 	types := c.Query("type")
+	transactionItemId := c.Query("transactionItemId")
+
+	where := ""
+	if transactionItemId != "" {
+		where = " AND tr.id = " + transactionItemId
+	}
 
 	results, err := helpers.ExecuteQuery(fmt.Sprintf(
 		`WITH data_details as (
+
+			WITH data_review as (
+					SELECT sq.order_item_id,
+							JSONB_AGG(sq.value_transaction) FILTER (WHERE sq.value_transaction IS NOT NULL)->0 as value_transaction
+					FROM (
+					SELECT order_item_id,
+							CASE WHEN order_item_id IS NOT NULL
+									THEN JSONB_BUILD_OBJECT(
+										'id', rev.id,
+										'rating', rev.rating,
+										'description', rev.description,
+										'photo', rev.photo
+									)
+														
+								ELSE null
+								END as value_transaction
+							FROM tk.review rev WHERE customer_id = %s AND order_id IS NULL
+					) sq
+					GROUP BY order_item_id
+				)
+
 			SELECT 
 				trd.transaction_item_id,
 				JSONB_AGG(
@@ -579,12 +637,12 @@ func GetTransactionsItem(c *fiber.Ctx) error {
 					'jumlah_point', SUM(trd.point),
 					'voucher_tokoku', 0
 				) as invoice,
-				 rev.rating,
-				JSONB_BUILD_OBJECT(
-					'rating', rev.rating,
-					'description', rev.description,
-					'photo', rev.photo
-				) as review,
+				rev.order_item_id as rating,
+				JSONB_AGG(
+					JSONB_BUILD_OBJECT(
+						'transaction', rev.value_transaction
+					)
+				)->0 as review,
 				tr.estimate_date,
 				tr.delivered_date
 			FROM tk.transaction_item_detail trd
@@ -599,11 +657,10 @@ func GetTransactionsItem(c *fiber.Ctx) error {
 			LEFT JOIN salesman s
 				ON (tr.reference_id = s.id
 				AND tr.reference_name = 'SALESMAN')
-			LEFT JOIN tk.review rev
+			LEFT JOIN data_review rev
 				ON tr.id = rev.order_item_id
-				AND rev.order_id IS NULL
 			WHERE tr.customer_id = %s AND ts.name = UPPER('%s')
-			GROUP BY trd.transaction_item_id, tr.id, c.id, s.id, rev.id
+			GROUP BY trd.transaction_item_id, tr.id, c.id, s.id, rev.order_item_id
 		)
 		
 		SELECT LOWER(name) as name,
@@ -628,8 +685,8 @@ func GetTransactionsItem(c *fiber.Ctx) error {
 			AND tr.customer_id = %s
 		LEFT JOIN data_details trd
 			ON tr.id = trd.transaction_item_id
-		WHERE ts.name = UPPER('%s')
-		GROUP BY ts.name`, customerId, types, customerId, types))
+		WHERE ts.name = UPPER('%s') %s
+		GROUP BY ts.name`, customerId, customerId, types, customerId, types, where))
 
 	if results == nil {
 		return c.Status(fiber.StatusOK).JSON(helpers.ResponseDataMultiple{

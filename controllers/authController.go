@@ -144,7 +144,7 @@ func LoginOauth(c *fiber.Ctx) error {
 				})
 			}
 
-			tokenString, expired, err := createJWT(email)
+			tokenString, expired, err := CreateJWT(email)
 			if err != nil {
 				fmt.Println("Error:", err.Error())
 				return c.Status(http.StatusInternalServerError).SendString("Could not generate token")
@@ -190,7 +190,7 @@ func LoginOauth(c *fiber.Ctx) error {
 				})
 			}
 
-			tokenString, expired, err := createJWT(email)
+			tokenString, expired, err := CreateJWT(email)
 			if err != nil {
 				fmt.Println("Error:", err.Error())
 				return c.Status(http.StatusInternalServerError).SendString("Could not generate token")
@@ -219,7 +219,7 @@ func LoginOauth(c *fiber.Ctx) error {
 
 }
 
-func createJWT(userID string) (string, int64, error) {
+func CreateJWT(userID string) (string, int64, error) {
 
 	err := godotenv.Load()
 	if err != nil {
@@ -656,7 +656,7 @@ func OAuthCallback(c *fiber.Ctx) error {
 	// Generate JWT
 	// fmt.Println(user)
 	username := user["email"].(string)
-	tokenString, _, err := createJWT(username)
+	tokenString, _, err := CreateJWT(username)
 	if err != nil {
 		fmt.Println("Error:", err.Error())
 		return c.Status(http.StatusInternalServerError).SendString("Could not generate token")

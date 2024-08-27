@@ -630,3 +630,79 @@ func NewCurl(data map[string]string, method string, url string, c *fiber.Ctx) ma
 
 	return responseData
 }
+
+func RefreshUser(userId string) ([]map[string]interface{}, error) {
+
+	datas, err := ExecuteQuery(fmt.Sprintf(`WITH data_customer AS (SELECT c.user_id, JSONB_AGG(c.*) as datas FROM tk.get_customer_by_userid(%v) c GROUP BY c.user_id)
+
+											SELECT NULL as employee,
+												u.id,
+												u.full_name as name,
+												u.username,
+												u.profile_photo,
+												p.email,
+												p.phone,
+												ARRAY[]::varchar[] as permission,
+												dc.datas as "userInfo"
+											FROM public.user u
+											LEFT JOIN data_customer dc
+												ON u.id = dc.user_id
+											LEFT JOIN hr.person p
+												ON u.id = p.user_id
+											WHERE u.id = %v
+											GROUP BY u.id, p.id, dc.datas`, userId, userId))
+
+	if err != nil {
+		return nil, err
+	}
+
+	return datas, nil
+}
+
+func SendCurl(data []byte, method string, url string) (map[string]interface{}, error) {
+
+	client := &http.Client{}
+
+	// req, err := http.NewRequest("GET", "https://rest.pt-bks.com/pluto-mobile/md/getDataTodayMD2", bytes.NewReader(dataSend))
+	req, err := http.NewRequest(method, url, bytes.NewReader(data))
+	if err != nil {
+		fmt.Println("Error creating request:", err)
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Send the request
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Println("Error sending request:", err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Read the response body
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("Error reading response:", err)
+	}
+
+	responseData, err := ByteResponse(responseBody)
+	if err != nil {
+		fmt.Println("Error reading response:", err)
+	}
+
+	switch responseData["data"].(type) {
+	case map[string]interface{}:
+		if len(responseData["data"].(map[string]interface{})) == 0 {
+			responseData["data"] = nil
+		}
+	case []interface{}:
+		if len(responseData["data"].([]interface{})) == 0 {
+			responseData["data"] = nil
+		}
+	default:
+		responseData["data"] = nil
+
+	}
+
+	return responseData, nil
+}

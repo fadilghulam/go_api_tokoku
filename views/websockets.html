@@ -10,6 +10,9 @@
 <button onclick="send3()">Addition</button>
 <p></p>
 <button onclick="sendSocket()">Dynamic Socket</button>
+<p></p>
+<input type="number" id="userid" placeholder="User Id">
+<button onclick="sendSocketUser()">User Socket</button>
 <pre id="output"></pre>
 <p id="result"></p>
 <script>
@@ -17,10 +20,13 @@
     var output = document.getElementById("output");
     var inputNum1 = document.getElementById('num1');
     var inputNum2 = document.getElementById('num2');
-    var socket = new WebSocket("ws://localhost:4000/ws/echo");
-    var socket2 = new WebSocket("ws://localhost:4000/ws/print");
-    var socket3 = new WebSocket("ws://localhost:4000/ws/addition");
-    var socketSocket = new WebSocket("ws://localhost:4000/ws/simpleSocket");
+    var inputUserid = document.getElementById('userid');
+    var socket = new WebSocket("ws://localhost:4001/ws/echo");
+    var socket2 = new WebSocket("ws://localhost:4001/ws/print");
+    var socket3 = new WebSocket("ws://localhost:4001/ws/addition");
+    var socketSocket = new WebSocket("ws://localhost:4001/ws/simpleSocket");
+    // var socketUser = new WebSocket("ws://localhost:4001/ws/testNewSocket");
+    var socketUser = new WebSocket("wss://api.tokoku.pt-bks.com/ws/refreshUserSocket");
 
     socket.onopen = function () {
         output.innerHTML += "Status: Socket 1 Connected\n";
@@ -36,6 +42,10 @@
 
     socketSocket.onopen = function () {
         output.innerHTML += "Status: Socket Dynamic Connected\n";
+    };
+
+    socketUser.onopen = function () {
+        output.innerHTML += "Status: Socket User Connected\n";
     };
 
     socket.onmessage = function (e) {
@@ -66,6 +76,13 @@
             inputNum2.value ="";
         }
     }
+
+    socketUser.onmessage = function (e) {
+        const message = JSON.parse(e.data);
+
+        console.log(message);
+        output.innerHTML += "Server User: " + message.data + "\n";
+    };
 
     function send() {
         socket.send(input.value);
@@ -112,5 +129,10 @@
 
         const message = { num1: num1, num2: num2, str: input.value };
         socketSocket.send(JSON.stringify(message));
+    }
+
+    function sendSocketUser(){
+        const userId = inputUserid.value;
+        socketUser.send(JSON.stringify({ userId }));
     }
 </script>

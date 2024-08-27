@@ -4,6 +4,7 @@ import (
 	"fmt"
 	db "go_api_tokoku/config"
 	"go_api_tokoku/routes"
+	"log"
 	"os"
 
 	"github.com/gofiber/fiber/v2"
@@ -17,10 +18,17 @@ func main() {
 	db.Connect()
 
 	app := fiber.New()
-	app.Use(cors.New())
+	app.Use(cors.New(
+	// 	cors.Config{
+	// 	AllowOrigins: "*", // Allow all origins
+	// 	AllowHeaders: "Origin, Content-Type, Accept",
+	// }
+	))
 	//routing
+	routes.SocketIoSetup(app)
 	routes.Setup(app)
 
-	addr := fmt.Sprintf("%s:%s", os.Getenv("HOST"), os.Getenv("PORT"))
-	app.Listen(addr)
+	// addr := fmt.Sprintf("%s:%s", os.Getenv("HOST"), os.Getenv("PORT"))
+	addr := fmt.Sprintf("%s:%s", os.Getenv("HOST"), "4002")
+	log.Fatal(app.Listen(addr))
 }

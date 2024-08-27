@@ -3,11 +3,19 @@ package routes
 import (
 	"fmt"
 	"go_api_tokoku/controllers"
+	"go_api_tokoku/helpers"
 	"os"
 
+	db "go_api_tokoku/config"
+
 	"github.com/dgrijalva/jwt-go"
+	// fsio "github.com/gofiber/contrib/socketio"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/websocket/v2"
+
+	// socketio "github.com/googollee/go-socket.io"
+	"github.com/gofiber/fiber/v2/middleware/adaptor"
+	"github.com/zishang520/socket.io/v2/socket"
 )
 
 func AuthMiddleware(c *fiber.Ctx) error {
@@ -42,6 +50,10 @@ func AuthMiddleware(c *fiber.Ctx) error {
 	return c.Next()
 }
 
+func testFunc(userId string) string {
+	return userId + " exist"
+}
+
 func Setup(app *fiber.App) {
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.SendString("Landing Page!")
@@ -53,13 +65,20 @@ func Setup(app *fiber.App) {
 	})
 
 	webSocketGroup := app.Group("ws")
+
 	webSocketGroup.Get("/", func(c *fiber.Ctx) error {
 		return c.SendFile("views/websockets.html")
+	})
+	webSocketGroup.Get("/v2", func(c *fiber.Ctx) error {
+		return c.SendFile("views/websockets2.html")
 	})
 	webSocketGroup.Get("/echo", websocket.New(controllers.EchoHandler))
 	webSocketGroup.Get("/print", websocket.New(controllers.EchoHandler2))
 	webSocketGroup.Get("/addition", websocket.New(controllers.TestHandler))
 	webSocketGroup.Get("/simpleSocket", websocket.New(controllers.SimpleSocketHandler))
+	webSocketGroup.Get("/testNewSocket", websocket.New(controllers.HandleWebSocket))
+	// webSocketGroup.Get("/testNewSocket", websocket.New(controllers.HandleWebSocket))
+	webSocketGroup.Get("/testNewSocket2", controllers.WebsocketHandler, controllers.WsSearchUserByID(db.DB))
 
 	//authentication routes
 	app.Post("/login", controllers.Login)
@@ -73,6 +92,8 @@ func Setup(app *fiber.App) {
 	app.Post("/sendEmail", controllers.SendEmail)
 	app.Get("/loginOauth", controllers.LoginOauth)
 	app.Post("/quickCheckout", controllers.QuickCheckout)
+
+	app.Get("/getFlagToday", controllers.GetFlagToday)
 
 	// app.Post("/TestHash", controllers.TestHash)
 
@@ -135,6 +156,8 @@ func Setup(app *fiber.App) {
 	authGroup.Get("/getComplaints", controllers.GetComplaints)
 	authGroup.Post("/insertComplaints", controllers.InsertComplaints)
 	authGroup.Get("/callCenter", controllers.GetCallCenter)
+	authGroup.Get("/getCountReviews", controllers.GetCountCustomerReviews)
+	authGroup.Get("/getCustomerReviews", controllers.GetCustomerReviews)
 
 	//Membership routes
 	authGroup.Get("/getMembership", controllers.GetMembership)
@@ -146,5 +169,57 @@ func Setup(app *fiber.App) {
 	// //reports
 	// app.Get("/revenues", controllers.GetRevenues)
 	// app.Get("/solds", controllers.GetSolds)
+}
+func SocketIoSetup(app *fiber.App) {
+	// Socket.IO setup
+	socketio := socket.NewServer(nil, nil)
+	socketio.On("connection", func(clients ...interface{}) {
+		client := clients[0].(*socket.Socket)
 
+		for i := range clients {
+			client := clients[i].(*socket.Socket)
+			client.Emit("message", "Hello World!")
+		}
+
+		client.On("userId", func(args ...interface{}) {
+			userIdClient := args[0].(string)
+
+			returnMap := make(map[string]interface{})
+
+			result, err := helpers.RefreshUser(userIdClient)
+			if err != nil {
+				fmt.Println(err)
+				client.Emit("returnData", "Failed to get user data")
+			}
+			tokenString, expired, err := controllers.CreateJWT(userIdClient)
+			jwtMap := map[string]interface{}{
+				"expired": expired,
+				"token":   tokenString,
+			}
+			returnMap["auth"] = true
+			returnMap["data"] = result
+			returnMap["jwt"] = jwtMap
+
+			client.Emit("returnData", returnMap)
+		})
+
+		client.On("disconnect", func(args ...interface{}) {
+			client.Disconnect(true)
+		})
+	})
+
+	socketio.Of("/connectCustomer", nil).On("connection", func(clients ...interface{}) {
+		client := clients[0].(*socket.Socket)
+		client.On("userId", func(args ...interface{}) {
+			userIdClient := args[0].(string)
+			result, err := helpers.RefreshUser(userIdClient)
+			if err != nil {
+				fmt.Println(err)
+				client.Emit("returnData", "Failed to get user data")
+			}
+			client.Emit("returnData", result)
+		})
+	})
+	app.Get("/socket.io", adaptor.HTTPHandler(socketio.ServeHandler(nil)))
+	app.Post("/socket.io", adaptor.HTTPHandler(socketio.ServeHandler(nil)))
 }
