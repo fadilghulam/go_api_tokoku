@@ -89,8 +89,8 @@ func InsertReview(c *fiber.Ctx) error {
 		})
 	}
 
-	getInsertedReview := tx.First(&review).Where("id = ? AND salesman_id IS NULL", review.ID)
-	if getInsertedReview.Error != nil {
+	err = tx.First(&review).Where("id = ? AND salesman_id IS NULL", review.ID).Error
+	if err != nil {
 		tx.Rollback()
 		fmt.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
