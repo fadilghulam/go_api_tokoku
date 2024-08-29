@@ -642,6 +642,7 @@ func RefreshUser(userId string) ([]map[string]interface{}, error) {
 												u.profile_photo,
 												p.email,
 												p.phone,
+												p.ktp,
 												ARRAY[]::varchar[] as permission,
 												dc.datas as "userInfo"
 											FROM public.user u

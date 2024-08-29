@@ -16,15 +16,30 @@ func GetCountTransactions(c *fiber.Ctx) error {
 	customerId := c.Query("id")
 
 	result, err := helpers.ExecuteQuery(fmt.Sprintf(`SELECT JSON_AGG(data.count_data) as count_data FROM (
-														SELECT --ts.name as transaction_state, COUNT(tr.id) as count_data,
-														JSONB_BUILD_OBJECT(ts.name, COUNT(tr.id)) as count_data
+														SELECT JSONB_BUILD_OBJECT(sq.name, SUM(sq.count)) as count_data
+														FROM (
+														SELECT ts.name, COUNT(tr.id)
+														-- JSONB_BUILD_OBJECT(ts.name, COUNT(tr.id)) as count_data
 														FROM tk.transaction_state ts
 														LEFT JOIN tk.transaction tr
 															ON ts.id = tr.transaction_state_id
 															AND tr.customer_id = %s
+															AND tr.penjualan_id IS NULL
 														GROUP BY ts.id
-														ORDER BY ts.id
-													) data`, customerId))
+
+														UNION
+
+														SELECT
+														ts.name,
+														COUNT(p.id)
+														FROM tk.transaction_state ts
+														LEFT JOIN penjualan p
+															ON p.customer_id = %s
+															AND ts.id = 3
+														GROUP BY ts.id
+														) sq
+														 GROUP BY sq.name
+													) data`, customerId, customerId))
 
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
@@ -102,7 +117,41 @@ func GetTransactions(c *fiber.Ctx) error {
 	if transactionId == "" && table == "" {
 		query = fmt.Sprintf(
 			`SELECT sq.* FROM (
-				SELECT tr.id, 
+
+				WITH data_review as (
+					SELECT sq.order_id, MAX(sq.salesman_id) as salesman_id,
+							JSONB_AGG(sq.value_salesman) FILTER (WHERE sq.value_salesman IS NOT NULL)->0 as value_salesman,
+							JSONB_AGG(sq.value_transaction) FILTER (WHERE sq.value_transaction IS NOT NULL)->0 as value_transaction
+					FROM (
+					SELECT order_id, salesman_id,
+							CASE WHEN order_id IS NOT NULL 
+									AND salesman_id IS NOT NULL 
+									THEN JSONB_BUILD_OBJECT(
+										'id', rev.id,
+										'rating', rev.rating,
+										'description', rev.description,
+										'photo', rev.photo
+									)
+														
+								ELSE null
+								END as value_salesman,
+							CASE WHEN order_id IS NOT NULL
+									AND salesman_id IS NULL
+									THEN JSONB_BUILD_OBJECT(
+										'id', rev.id,
+										'rating', rev.rating,
+										'description', rev.description,
+										'photo', rev.photo
+									)
+														
+								ELSE null
+								END as value_transaction
+							FROM tk.review rev WHERE customer_id = %s AND order_item_id IS NULL
+					) sq
+					GROUP BY order_id
+				)
+
+				SELECT tr.id||'' as id, 
 					JSONB_AGG(
 						JSONB_BUILD_OBJECT(
 							'id', trd.id,
@@ -122,17 +171,23 @@ func GetTransactions(c *fiber.Ctx) error {
 						) ORDER BY p.id
 					) as products,
 					CASE WHEN COUNT(trd.id) = 1 THEN NULL ELSE COUNT(trd.id) - 1 END as jumlah_produk,
-					CASE WHEN rev.id IS NOT NULL THEN
-						JSONB_BUILD_OBJECT(
-									'rating', rev.rating,
-									'description', rev.description,
-									'photo', rev.photo
-								)
-							ELSE NULL END as review,
+					JSONB_AGG(
+							JSONB_BUILD_OBJECT(
+								'salesman', rev.value_salesman,
+								'transaction', rev.value_transaction
+							)
+						)->0 as review,
 					tr.total_transaction as total_order,
 					tr.transaction_date,
 					ts.name as type,
-					'transaction' as table
+					tr.estimate_date,
+					'transaction' as table,
+					JSONB_BUILD_OBJECT(
+							'id', tr.reference_id,
+							'name', s.name,
+							'phone', s.phone,
+							'type', tr.reference_name
+						) as courier
 				FROM tk.transaction_state ts
 				JOIN tk.transaction tr
 					ON ts.id = tr.transaction_state_id
@@ -142,15 +197,17 @@ func GetTransactions(c *fiber.Ctx) error {
 					ON trd.produk_id = p.id
 				LEFT JOIN produk_satuan ps
 					ON p.satuan_id = ps.id
-				LEFT JOIN tk.review rev
+				LEFT JOIN data_review rev
 					ON tr.id = rev.order_id
-					AND rev.order_item_id IS NULL
+				LEFT JOIN salesman s
+					ON tr.reference_id = s.id
+					AND tr.reference_name = 'SALESMAN'
 				WHERE tr.customer_id = %s AND ts.name = UPPER('%s') AND tr.penjualan_id IS NULL
-				GROUP BY tr.id, rev.id, ts.id
+				GROUP BY tr.id, ts.id, s.id
 
 				UNION 
 
-				SELECT tr.id, 
+				SELECT pj.id||'' as id, 
 					JSONB_AGG(
 						JSONB_BUILD_OBJECT(
 							'id', pj.id,
@@ -170,36 +227,44 @@ func GetTransactions(c *fiber.Ctx) error {
 						) ORDER BY p.id
 					) as products,
 					CASE WHEN COUNT(pd.id) = 1 THEN NULL ELSE COUNT(pd.id) - 1 END as jumlah_produk,
-					CASE WHEN rev.id IS NOT NULL THEN
-						JSONB_BUILD_OBJECT(
-									'rating', rev.rating,
-									'description', rev.description,
-									'photo', rev.photo
-								)
-							ELSE NULL END as review,
+					JSONB_AGG(
+							JSONB_BUILD_OBJECT(
+								'salesman', rev.value_salesman,
+								'transaction', rev.value_transaction
+							)
+						)->0 as review,
 					pj.total_penjualan as total_order,
 					pj.tanggal_penjualan as transaction_date,
-					ts.name as type,
-					'penjualan' as table
-				FROM tk.transaction_state ts
-				JOIN tk.transaction tr
+					COALESCE(ts.name, 'ACCEPTED') as type,
+					tr.estimate_date,
+					'penjualan' as table,
+					JSONB_BUILD_OBJECT(
+							'id', tr.reference_id,
+							'name', s.name,
+							'phone', s.phone,
+							'type', tr.reference_name
+						) as courier
+				FROM penjualan pj
+				LEFT JOIN tk.transaction tr
+					ON tr.penjualan_id IS NOT NULL
+					AND pj.id = tr.penjualan_id
+				LEFT JOIN tk.transaction_state ts
 					ON ts.id = tr.transaction_state_id
-					AND tr.penjualan_id IS NOT NULL
-				JOIN penjualan pj
-					ON tr.penjualan_id = pj.id
 				JOIN penjualan_detail pd
 					ON pj.id = pd.penjualan_id
 				JOIN produk p
 					ON pd.produk_id = p.id
 				LEFT JOIN produk_satuan ps
 					ON p.satuan_id = ps.id
-				LEFT JOIN tk.review rev
-					ON tr.id = rev.order_id
-					AND rev.order_item_id IS NULL
-				WHERE tr.customer_id = %s AND ts.name = UPPER('%s') AND tr.penjualan_id IS NOT NULL
-				GROUP BY tr.id, pj.id, rev.id, ts.id
+				LEFT JOIN data_review rev
+					ON pj.id = rev.order_id
+				LEFT JOIN salesman s
+					ON tr.reference_id = s.id
+					AND tr.reference_name = 'SALESMAN'
+				WHERE pj.customer_id = %s AND COALESCE(ts.name, 'ACCEPTED') = UPPER('%s')
+				GROUP BY tr.id, pj.id, ts.id, s.id
 				) sq
-				ORDER BY sq.transaction_date DESC`, customerId, types, customerId, types)
+				ORDER BY sq.transaction_date DESC`, customerId, customerId, types, customerId, types)
 	} else {
 
 		if transactionId != "" && table != "" {
@@ -301,7 +366,8 @@ func GetTransactions(c *fiber.Ctx) error {
 							'photo', comp.image,
 							'status', comp.status,
 							'feedback', comp.feedback
-						) as complaint
+						) as complaint,
+						 tr.estimate_date
 					FROM tk.transaction_detail trd
 					JOIN tk.transaction tr
 						ON trd.transaction_id = tr.id
@@ -332,7 +398,7 @@ func GetTransactions(c *fiber.Ctx) error {
 				SELECT LOWER(name) as name,
 						JSONB_AGG(
 							JSONB_BUILD_OBJECT(
-								'id', tr.id,
+								'id', tr.id||'',
 								'type', ts.name,
 								'transaction_date', tr.transaction_date,
 								'total_order', tr.total_transaction,
@@ -342,7 +408,8 @@ func GetTransactions(c *fiber.Ctx) error {
 								'invoice', trd.invoice,
 								'note', tr.note,
 								'review', CASE WHEN trd.param_rev IS NULL THEN NULL ELSE trd.review END,
-								'complaints', CASE WHEN trd.complaint_id IS NULL THEN NULL ELSE trd.complaint END
+								'complaints', CASE WHEN trd.complaint_id IS NULL THEN NULL ELSE trd.complaint END,
+								'estimate_date', tr.estimate_date
 							) ORDER BY tr.transaction_date DESC
 						) FILTER (WHERE tr.id IS NOT NULL) as datas
 				FROM tk.transaction_state ts
@@ -355,11 +422,45 @@ func GetTransactions(c *fiber.Ctx) error {
 			} else {
 
 				query = fmt.Sprintf(`WITH data_penjualan as (
+
+									WITH data_review as (
+							SELECT sq.order_id, MAX(sq.salesman_id) as salesman_id,
+									JSONB_AGG(sq.value_salesman) FILTER (WHERE sq.value_salesman IS NOT NULL)->0 as value_salesman,
+									JSONB_AGG(sq.value_transaction) FILTER (WHERE sq.value_transaction IS NOT NULL)->0 as value_transaction
+							FROM (
+							SELECT order_id, salesman_id,
+									CASE WHEN order_id IS NOT NULL 
+											AND salesman_id IS NOT NULL 
+											THEN JSONB_BUILD_OBJECT(
+												'id', rev.id,
+												'rating', rev.rating,
+												'description', rev.description,
+												'photo', rev.photo
+											)
+																
+										ELSE null
+										END as value_salesman,
+									CASE WHEN order_id IS NOT NULL
+											AND salesman_id IS NULL
+											THEN JSONB_BUILD_OBJECT(
+												'id', rev.id,
+												'rating', rev.rating,
+												'description', rev.description,
+												'photo', rev.photo
+											)
+																
+										ELSE null
+										END as value_transaction
+									FROM tk.review rev WHERE order_id = %s
+							) sq
+							GROUP BY order_id
+						)
+
 									SELECT 
 										pd.penjualan_id,
 										JSONB_AGG(
 											JSONB_BUILD_OBJECT(
-												'id', pj.id,
+												'id', pj.id||'',
 												'produk_id', pd.produk_id,
 												'point', 0,
 												'code', p.code,
@@ -403,7 +504,13 @@ func GetTransactions(c *fiber.Ctx) error {
 											'total_pembayaran', pj.total_penjualan
 										) as invoice,
 										null as rating,
-										null as review,
+										COALESCE(rev.order_id, rev.salesman_id) as param_rev,
+										JSONB_AGG(
+											JSONB_BUILD_OBJECT(
+												'salesman', rev.value_salesman,
+												'transaction', rev.value_transaction
+											)
+										)->0 as review,
 										null as complaint_id,
 										null as complaint
 									FROM penjualan_detail pd
@@ -417,14 +524,16 @@ func GetTransactions(c *fiber.Ctx) error {
 										ON p.satuan_id = ps.id
 									LEFT JOIN salesman s
 										ON pj.salesman_id = s.id
+									LEFT JOIN data_review rev
+										ON pj.id = rev.order_id
 									WHERE pj.id = %s
-									GROUP BY pd.penjualan_id, pj.id, p.id, c.id, s.id
+									GROUP BY pd.penjualan_id, pj.id, c.id, s.id, COALESCE(rev.order_id, rev.salesman_id)
 								)
 									
 								SELECT LOWER('Accepted') as name,
 										JSONB_AGG(
 											JSONB_BUILD_OBJECT(
-												'id', tr.id,
+												'id', tr.id||'',
 												'type', 'Accepted',
 												'transaction_date', tr.tanggal_penjualan,
 												'total_order', tr.total_penjualan,
@@ -433,14 +542,15 @@ func GetTransactions(c *fiber.Ctx) error {
 												'customer', trd.customer,
 												'invoice', trd.invoice,
 												'note', null,
-												'review', CASE WHEN trd.rating IS NULL THEN NULL ELSE trd.review END,
-												'complaints', CASE WHEN trd.complaint_id IS NULL THEN NULL ELSE trd.complaint END
+												'review', CASE WHEN trd.param_rev IS NULL THEN NULL ELSE trd.review END,
+												'complaints', CASE WHEN trd.complaint_id IS NULL THEN NULL ELSE trd.complaint END,
+												'estimate_date', null
 											) ORDER BY tr.tanggal_penjualan DESC
 										) FILTER (WHERE tr.id IS NOT NULL) as datas
 								FROM penjualan tr
 								LEFT JOIN data_penjualan trd
 									ON tr.id = trd.penjualan_id
-								WHERE tr.id = %s`, transactionId, transactionId)
+								WHERE tr.id = %s`, transactionId, transactionId, transactionId)
 			}
 		}
 	}
@@ -534,16 +644,34 @@ func GetPointsCustomer(c *fiber.Ctx) error {
 
 	customerId := c.Query("customerId")
 
+	// results, err := helpers.ExecuteQuery(fmt.Sprintf(
+	// 	`SELECT cph.customer_id,
+	// 			SUM(CASE WHEN cph.exchange_id IS NOT NULL THEN cph.point ELSE 0 END) as total_point_digunakan,
+	// 			SUM(CASE WHEN cph.transaction_id IS NOT NULL THEN cph.point ELSE 0 END) as total_point_terkumpul,
+	// 			(SUM(CASE WHEN cph.transaction_id IS NOT NULL THEN cph.point ELSE 0 END) - SUM(CASE WHEN cph.exchange_id IS NOT NULL THEN cph.point ELSE 0 END)) as total_point
+	// 	FROM tk.customer_point_history cph
+	// 	LEFT JOIN tk.transaction t
+	// 		ON cph.transaction_id = t.id
+	// 	WHERE TRUE AND cph.customer_id = %s
+	// 	GROUP BY cph.customer_id`, customerId))
+
 	results, err := helpers.ExecuteQuery(fmt.Sprintf(
-		`SELECT cph.customer_id,
+		`WITH point_history as (
+			SELECT cph.customer_id,
 				SUM(CASE WHEN cph.exchange_id IS NOT NULL THEN cph.point ELSE 0 END) as total_point_digunakan,
-				SUM(CASE WHEN cph.transaction_id IS NOT NULL THEN cph.point ELSE 0 END) as total_point_terkumpul,
-				(SUM(CASE WHEN cph.transaction_id IS NOT NULL THEN cph.point ELSE 0 END) - SUM(CASE WHEN cph.exchange_id IS NOT NULL THEN cph.point ELSE 0 END)) as total_point
-		FROM tk.customer_point_history cph
-		LEFT JOIN tk.transaction t
-			ON cph.transaction_id = t.id
-		WHERE TRUE AND cph.customer_id = %s
-		GROUP BY cph.customer_id`, customerId))
+				SUM(CASE WHEN cph.transaction_id IS NOT NULL THEN cph.point ELSE 0 END) as total_point_terkumpul
+			FROM tk.customer_point_history cph
+			WHERE TRUE AND cph.customer_id = %s
+			GROUP BY cph.customer_id
+		)
+			
+		SELECT cp.point as total_point,
+				ph.total_point_digunakan,
+				ph.total_point_terkumpul
+		FROM tk.customer_point cp
+		LEFT JOIN point_history ph
+			ON cp.customer_id = ph.customer_id
+		WHERE cp.customer_id = %s`, customerId, customerId))
 
 	if results == nil {
 		return c.Status(fiber.StatusOK).JSON(helpers.Response{

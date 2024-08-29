@@ -7,11 +7,14 @@ import (
 	model "go_api_tokoku/models"
 	"log"
 	"math"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"gorm.io/gorm"
 )
 
 func GetReview(c *fiber.Ctx) error {
@@ -42,6 +45,28 @@ func GetReview(c *fiber.Ctx) error {
 	})
 }
 
+// func InsertReview(c *fiber.Ctx) error {
+
+// 	review := new(model.Review)
+// 	if err := c.BodyParser(review); err != nil {
+// 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+// 			Message: "Something went wrong",
+// 			Success: false,
+// 		})
+// 	}
+// 	err := db.DB.Create(&review).Error
+// 	if err != nil {
+// 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+// 			Message: "Something went wrong",
+// 			Success: false,
+// 		})
+// 	}
+// 	return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
+// 		Message: "Success",
+// 		Success: true,
+// 	})
+// }
+
 func InsertReview(c *fiber.Ctx) error {
 
 	review := new(model.Review)
@@ -51,16 +76,88 @@ func InsertReview(c *fiber.Ctx) error {
 			Success: false,
 		})
 	}
-	err := db.DB.Create(&review).Error
+
+	tx := db.DB.Begin()
+
+	err := tx.Create(&review).Error
 	if err != nil {
+		tx.Rollback()
+		fmt.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
 		})
 	}
-	return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
+
+	getInsertedReview := tx.First(&review).Where("id = ? AND salesman_id IS NULL", review.ID)
+	if getInsertedReview.Error != nil {
+		tx.Rollback()
+		fmt.Println(err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	pointsRule := []model.PointsRule{}
+
+	err = tx.Find(&pointsRule, "type = ?", "review").Error
+	if err != nil {
+		tx.Rollback()
+		fmt.Println(err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	var tempPoints int16
+	if len(pointsRule) >= 0 {
+		reviewValue := reflect.ValueOf(review).Elem()
+
+		for _, rule := range pointsRule {
+			field := reviewValue.FieldByName(rule.SubType)
+			// fmt.Println(field)
+			if field.IsValid() && field.String() != "" {
+				tempPoints += rule.Point
+			}
+		}
+
+		customerPointHistory := new(model.CustomerPointHistory)
+		customerPointHistory.CustomerId = review.CustomerId
+		customerPointHistory.Point = tempPoints
+		customerPointHistory.TransactionId = review.OrderId
+		customerPointHistory.Type = "REVIEW"
+		customerPointHistory.DateTime = time.Now()
+
+		err = tx.Create(&customerPointHistory).Error
+		if err != nil {
+			tx.Rollback()
+			fmt.Println(err.Error())
+			return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+				Message: "Something went wrong",
+				Success: false,
+			})
+		}
+
+		err = tx.Model(&model.CustomerPoint{}).Where("customer_id = ?", review.CustomerId).Update("point", gorm.Expr("point + ?", tempPoints)).Error
+		if err != nil {
+			tx.Rollback()
+			fmt.Println(err.Error())
+			return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+				Message: "Something went wrong",
+				Success: false,
+			})
+		}
+
+	}
+
+	tx.Commit()
+
+	return c.Status(fiber.StatusOK).JSON(helpers.Response{
 		Message: "Success",
 		Success: true,
+		Data:    tempPoints,
 	})
 }
 
@@ -70,16 +167,18 @@ func GetCallCenter(c *fiber.Ctx) error {
 		Whatsapp  string `json:"whatsapp"`
 		Instagram string `json:"instagram"`
 		Email     string `json:"email"`
+		Linkedin  string `json:"linkedin"`
 		Phone     string `json:"phone"`
 	}
 
 	// datas = map[string]string{
 
 	data := datas{
-		Whatsapp:  "6281359613831",
-		Instagram: "@pt-bks.com",
-		Email:     "armour.retail.family@pt-bks.com",
-		Phone:     "087741135521",
+		Whatsapp:  "623415088783",
+		Instagram: "bksinside",
+		Email:     "info@pt-bks.com",
+		Linkedin:  "bercakawansejati",
+		Phone:     "623415088783",
 	}
 
 	return c.Status(fiber.StatusOK).JSON(helpers.Response{
@@ -92,7 +191,6 @@ func GetCallCenter(c *fiber.Ctx) error {
 func GetComplaints(c *fiber.Ctx) error {
 
 	complaints := []model.Complaints{}
-	// err := db.DB.Find(&complaints).Error
 
 	customerId := c.Query("customerId")
 	if customerId == "" {
@@ -105,6 +203,7 @@ func GetComplaints(c *fiber.Ctx) error {
 	// err := db.DB.Find(&complaints).Error
 	err := db.DB.Where("customer_id = ?", customerId).Find(&complaints).Order("id ASC").Error
 	if err != nil {
+		log.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
@@ -136,6 +235,7 @@ func InsertComplaints(c *fiber.Ctx) error {
 
 	complaints := new(model.Complaints)
 	if err := c.BodyParser(complaints); err != nil {
+		log.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
@@ -143,6 +243,7 @@ func InsertComplaints(c *fiber.Ctx) error {
 	}
 	err := db.DB.Create(&complaints).Error
 	if err != nil {
+		log.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
@@ -229,7 +330,7 @@ func GetCountCustomerReviews(c *fiber.Ctx) error {
 									JOIN tk.item i
 										ON trd.item_id = i.id
 									LEFT JOIN tk.review rv
-										ON tr.id = rv.order_id
+										ON tr.id = rv.order_item_id
 									LEFT JOIN tk.unit_mapping um
 										ON i.id = um.item_id
 									LEFT JOIN tk.item_unit_tk iu
@@ -264,7 +365,7 @@ func GetCountCustomerReviews(c *fiber.Ctx) error {
 
 		for _, v := range tempData {
 			for key, value := range v {
-				fmt.Println(key, value)
+				// fmt.Println(key, value)
 				flattenedResult[key] = int(value.(float64))
 			}
 		}
@@ -274,7 +375,7 @@ func GetCountCustomerReviews(c *fiber.Ctx) error {
 
 	data = tempData
 
-	return c.Status(fiber.StatusOK).JSON(helpers.ResponseDataMultiple{
+	return c.Status(fiber.StatusOK).JSON(helpers.Response{
 		Message: "Success",
 		Success: true,
 		Data:    data[0],
@@ -314,11 +415,20 @@ func GetCustomerReviews(c *fiber.Ctx) error {
 	qPage = " OFFSET " + tempQ
 
 	query := fmt.Sprintf(`SELECT sq.* FROM (
-			SELECT tr.id, 
+		SELECT tr.id, 
 						tr.total_transaction, 
 						tr.transaction_date,
+						'transaction' as table,
+						DATE(tr.transaction_date),
+						JSONB_BUILD_OBJECT(
+							'id', tr.reference_id,
+							'name', MAX(s.name),
+							'phone', MAX(s.phone),
+							'type', tr.reference_name
+						) as courier,
 						JSONB_AGG(
 							JSONB_BUILD_OBJECT(
+								'type', 'produk',
 								'id', trd.id,
 								'produk_id', trd.produk_id,
 								'point', trd.point,
@@ -336,7 +446,7 @@ func GetCustomerReviews(c *fiber.Ctx) error {
 													'pack', ps.pack
 												)
 							) ORDER BY p.order
-						) as details
+						) as products
 		FROM tk.transaction tr
 		JOIN tk.transaction_detail trd
 			ON tr.id = trd.transaction_id
@@ -350,7 +460,10 @@ func GetCustomerReviews(c *fiber.Ctx) error {
 			ON p.id = um.produk_id
 		LEFT JOIN tk.item_unit_tk iu
 			ON um.item_unit_id = iu.id
-		WHERE tr.customer_id = %s 
+		LEFT JOIN salesman s
+			ON tr.reference_id = s.id
+			AND tr.reference_name = 'SALESMAN'
+		WHERE tr.customer_id = %s AND tr.transaction_state_id = 3
 			%s
 		GROUP BY tr.id
 
@@ -359,8 +472,17 @@ func GetCustomerReviews(c *fiber.Ctx) error {
 		SELECT tr.id, 
 				0 as total_transaction, 
 				tr.transaction_date,
+				'transaction_item' as table,
+				DATE(tr.transaction_date),
+				JSONB_BUILD_OBJECT(
+							'id', tr.reference_id,
+							'name', MAX(s.name),
+							'phone', MAX(s.phone),
+							'type', tr.reference_name
+						) as courier,
 				JSONB_AGG(
 					JSONB_BUILD_OBJECT(
+						'type', 'item',
 						'id', trd.id,
 						'produk_id', trd.item_id,
 						'point', trd.point,
@@ -382,16 +504,21 @@ func GetCustomerReviews(c *fiber.Ctx) error {
 		JOIN tk.item i
 			ON trd.item_id = i.id
 		LEFT JOIN tk.review rv
-			ON tr.id = rv.order_id
+			ON tr.id = rv.order_item_id
 		LEFT JOIN tk.unit_mapping um
 			ON i.id = um.item_id
 		LEFT JOIN tk.item_unit_tk iu
 			ON um.item_unit_id = iu.id
-		WHERE tr.customer_id = %s 
+		LEFT JOIN salesman s
+			ON tr.reference_id = s.id
+			AND tr.reference_name = 'SALESMAN'
+		WHERE tr.customer_id = %s AND tr.transaction_state_id = 3
 			%s
 		GROUP BY tr.id
 		) sq
 		ORDER BY sq.transaction_date DESC`, customerId, qWhere, customerId, qWhere)
+
+	// fmt.Println(query)
 
 	var wg sync.WaitGroup
 	resultsChan := make(chan map[int][]map[string]interface{}, 2)

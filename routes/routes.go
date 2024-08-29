@@ -5,6 +5,7 @@ import (
 	"go_api_tokoku/controllers"
 	"go_api_tokoku/helpers"
 	"os"
+	"strconv"
 
 	db "go_api_tokoku/config"
 
@@ -122,6 +123,9 @@ func Setup(app *fiber.App) {
 	authGroup.Get("/points", controllers.GetPointsCustomer)
 	authGroup.Get("/pointsHistory", controllers.GetPointsHistory)
 
+	//Points routes
+	authGroup.Get("/getPointsRule", controllers.GetPointsRule)
+
 	//Cart routes
 	authGroup.Post("/cart", controllers.InsertCart)
 	authGroup.Get("/cart", controllers.GetCart)
@@ -175,14 +179,137 @@ func SocketIoSetup(app *fiber.App) {
 	socketio := socket.NewServer(nil, nil)
 	socketio.On("connection", func(clients ...interface{}) {
 		client := clients[0].(*socket.Socket)
+		fmt.Println("Client connected: ", client.Id())
 
-		for i := range clients {
-			client := clients[i].(*socket.Socket)
-			client.Emit("message", "Hello World!")
-		}
+		// for i := range clients {
+		// 	client := clients[i].(*socket.Socket)
+		// 	client.Emit("message", "Hello World!")
+		// }
 
-		client.On("userId", func(args ...interface{}) {
-			userIdClient := args[0].(string)
+		// client.On("message", func(args ...interface{}) {
+		// 	for i := range clients {
+		// 		tempClient := clients[i].(*socket.Socket)
+		// 		tempClient.Emit("message", "Hello World from client message from")
+		// 	}
+		// })
+		// socketio.FetchSocket()
+		// fmt.Println(client.FetchSockets())
+
+		client.On("requestData", func(args ...interface{}) {
+			// fmt.Println(args)
+			if len(args) == 0 {
+				client.Emit("returnData", "No user id")
+			} else {
+
+				var userIdClient string
+
+				switch args[0].(type) {
+				case string:
+					userIdClient = args[0].(string)
+				case float64:
+					userIdClient = strconv.Itoa(int(args[0].(float64)))
+				}
+
+				client.Join(socket.Room("room " + userIdClient))
+				// fmt.Println(client.Rooms())
+
+				// returnMap := make(map[string]interface{})
+
+				// result, err := helpers.RefreshUser(userIdClient)
+				// if err != nil {
+				// 	fmt.Println(err)
+				// 	client.Emit("returnData", "Failed to get user data")
+				// }
+
+				// if len(result) > 0 {
+
+				// 	tokenString, expired, _ := controllers.CreateJWT(userIdClient)
+				// 	jwtMap := map[string]interface{}{
+				// 		"expired": expired,
+				// 		"token":   tokenString,
+				// 	}
+
+				// 	returnMap["auth"] = true
+				// 	returnMap["data"] = result[0]
+				// 	returnMap["jwt"] = jwtMap
+				// } else {
+
+				// 	returnMap["auth"] = false
+				// 	returnMap["data"] = nil
+				// 	returnMap["jwt"] = nil
+				// }
+
+				// // fmt.Println(jwtMap)
+
+				// client.Emit("returnData", returnMap)
+				// socketio.Send(returnMap)
+
+				// fmt.Println(returnMap)
+			}
+		})
+
+		client.On("checkData", func(args ...interface{}) {
+			// fmt.Println(args)
+			if len(args) == 0 {
+				client.Emit("returnData", "No user id")
+			} else {
+
+				var userIdClient string
+
+				switch args[0].(type) {
+				case string:
+					userIdClient = args[0].(string)
+				case float64:
+					userIdClient = strconv.Itoa(int(args[0].(float64)))
+				}
+
+				// client.Join(socket.Room("room " + userIdClient))
+				// fmt.Println(client.Rooms())
+
+				returnMap := make(map[string]interface{})
+
+				result, err := helpers.RefreshUser(userIdClient)
+				if err != nil {
+					fmt.Println(err)
+					client.Emit("returnData", "Failed to get user data")
+				}
+
+				if len(result) > 0 {
+
+					tokenString, expired, _ := controllers.CreateJWT(userIdClient)
+					jwtMap := map[string]interface{}{
+						"expired": expired,
+						"token":   tokenString,
+					}
+
+					returnMap["auth"] = true
+					returnMap["data"] = result[0]
+					returnMap["jwt"] = jwtMap
+				} else {
+
+					returnMap["auth"] = false
+					returnMap["data"] = nil
+					returnMap["jwt"] = nil
+				}
+
+				// fmt.Println(jwtMap)
+
+				client.Emit("returnData", returnMap)
+				// socketio.Send(returnMap)
+
+				// fmt.Println(returnMap)
+			}
+		})
+
+		client.On("receivedUserId", func(args ...interface{}) {
+			var userIdClient string
+
+			switch args[0].(type) {
+			case string:
+				userIdClient = args[0].(string)
+			case float64:
+				userIdClient = strconv.Itoa(int(args[0].(float64)))
+			}
 
 			returnMap := make(map[string]interface{})
 
@@ -197,15 +324,24 @@ func SocketIoSetup(app *fiber.App) {
 				"token":   tokenString,
 			}
 			returnMap["auth"] = true
-			returnMap["data"] = result
+			returnMap["data"] = result[0]
 			returnMap["jwt"] = jwtMap
 
-			client.Emit("returnData", returnMap)
+			// client.Emit("returnData", returnMap)
+			socketio.To(socket.Room("room "+userIdClient)).Emit("returnData", returnMap)
 		})
 
 		client.On("disconnect", func(args ...interface{}) {
+			// client.Disconnect(true)
+			fmt.Println("Client disconnected: ", client.Id())
 			client.Disconnect(true)
 		})
+	})
+
+	socketio.On("disconnect", func(clients ...interface{}) {
+		client := clients[0].(*socket.Socket)
+		fmt.Println("Client disconnected: ", client.Id())
+		client.Disconnect(true)
 	})
 
 	socketio.Of("/connectCustomer", nil).On("connection", func(clients ...interface{}) {

@@ -203,6 +203,7 @@ func LoginOauth(c *fiber.Ctx) error {
 				"name":          person.FullName,
 				"permission":    nil,
 				"phone":         person.Phone,
+				"ktp":           person.Ktp,
 				"profile_photo": user.ProfilePhoto,
 				"username":      user.Username,
 				"userInfo":      customer,
