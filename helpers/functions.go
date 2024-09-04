@@ -509,13 +509,13 @@ func ArrayColumn(data []any, column string) []any {
 	return result
 }
 
-func SendNotification(title string, body string, userIds int, dataSend map[string]string, c *fiber.Ctx) error {
+func SendNotification(title string, body string, userIds int, customerId int64, dataSend map[string]string, c *fiber.Ctx) error {
 
 	tokenFCM := new([]model.TokenFcm)
 
 	// fmt.Println(userIds)
 
-	err := db.DB.Where("user_id IN ? AND app_name = ?", userIds, "tokoku").Find(&tokenFCM).Error
+	err := db.DB.Where("user_id IN ? AND app_name = ? AND customer_id = ?", userIds, "tokoku", customerId).Find(&tokenFCM).Error
 
 	if err != nil {
 		log.Println(err.Error())

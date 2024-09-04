@@ -555,7 +555,7 @@ func GetTransactions(c *fiber.Ctx) error {
 		}
 	}
 
-	results, err := helpers.ExecuteQuery(query)
+	// results, err := helpers.ExecuteQuery(query)
 
 	// go resultsCount, _ := helpers.ExecuteQuery(fmt.Sprintf(query + qPage + qLimit))
 	// fmt.Println(query)
@@ -586,18 +586,10 @@ func GetTransactions(c *fiber.Ctx) error {
 		}
 	}
 
-	if results == nil {
+	if len(tempResults[0]) == 0 {
 		return c.Status(fiber.StatusOK).JSON(helpers.ResponseDataMultiple{
 			Message: "Data not found",
 			Success: true,
-			Data:    nil,
-		})
-	}
-
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseDataMultiple{
-			Message: err.Error(),
-			Success: false,
 			Data:    nil,
 		})
 	}

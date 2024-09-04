@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-const TableNameFCM = "public.token_fcm"
+const TableNameFCM = "tk.token_fcm_toko"
 
 type TokenFcm struct {
 	UserID            int32     `gorm:"column:user_id" json:"userId"`
@@ -21,6 +21,7 @@ type TokenFcm struct {
 	AppVersion        string    `gorm:"column:appVersion;default:null" json:"appVersion"`
 	CreatedAt         time.Time `gorm:"column:created_at;not null;default:now()" json:"createdAt"`
 	UpdatedAt         time.Time `gorm:"column:updated_at;not null;default:now()" json:"updatedAt"`
+	CustomerId        int64     `gorm:"column:customer_id" json:"customerId"`
 }
 
 func (*TokenFcm) TableName() string {

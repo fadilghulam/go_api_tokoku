@@ -68,7 +68,7 @@ func InsertTokenFCM(c *fiber.Ctx) error {
 	}
 
 	checkData := []model.TokenFcm{}
-	err := tx.Where("app_name = ? AND user_id = ?", token.AppName, token.UserID).Find(&checkData).Error
+	err := tx.Where("app_name = ? AND user_id = ? AND customer_id = ?", token.AppName, token.UserID, token.CustomerId).Find(&checkData).Error
 	if err != nil {
 		tx.Rollback()
 		log.Println(err.Error())
@@ -95,7 +95,7 @@ func InsertTokenFCM(c *fiber.Ctx) error {
 			})
 		}
 	} else {
-		err := tx.Where("app_name = ? AND user_id = ?", token.AppName, token.UserID).Updates(token).Error
+		err := tx.Where("app_name = ? AND user_id = ? AND customer_id = ?", token.AppName, token.UserID, token.CustomerId).Updates(token).Error
 		if err != nil {
 			tx.Rollback()
 			log.Println(err.Error())
@@ -154,7 +154,7 @@ func SendNotificationFCM(c *fiber.Ctx) error {
 	dataFcm["title"] = "test title"
 	dataFcm["body"] = "test body"
 
-	err = helpers.SendNotification("test title", "test body", userIdInt, dataFcm, c)
+	err = helpers.SendNotification("test title", "test body", userIdInt, 77472, dataFcm, c)
 
 	if err != nil {
 		log.Println(err.Error())

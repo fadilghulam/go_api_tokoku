@@ -89,7 +89,6 @@ func LoginOauth(c *fiber.Ctx) error {
 		}
 
 		if user.ID == 0 {
-
 			newUser := &model.User{
 				Username:     email,
 				Password:     password,
@@ -114,8 +113,6 @@ func LoginOauth(c *fiber.Ctx) error {
 
 			// userId := user.ID
 			appId, _ := strconv.Atoi(os.Getenv("DEFAULT_APPID_TOKOKU"))
-
-			// fmt.Println("user id: ", user.ID, "userid: ", userId)
 
 			err = tx.Create(&model.HrPerson{
 				UserID:   newUser.ID,
@@ -196,15 +193,28 @@ func LoginOauth(c *fiber.Ctx) error {
 				return c.Status(http.StatusInternalServerError).SendString("Could not generate token")
 			}
 
+			var tempKtp, tempPhone *string
+			if person.Ktp == "" {
+				tempKtp = nil
+			} else {
+				tempKtp = &person.Ktp
+			}
+
+			if person.Phone == "" {
+				tempPhone = nil
+			} else {
+				tempPhone = &person.Phone
+			}
+
 			data = map[string]interface{}{
 				"email":         person.Email,
 				"employee":      nil,
 				"id":            user.ID,
 				"name":          person.FullName,
 				"permission":    nil,
-				"phone":         person.Phone,
-				"ktp":           person.Ktp,
+				"phone":         tempPhone,
 				"profile_photo": user.ProfilePhoto,
+				"ktp":           tempKtp,
 				"username":      user.Username,
 				"userInfo":      customer,
 			}
@@ -229,10 +239,10 @@ func CreateJWT(userID string) (string, int64, error) {
 
 	claims := jwt.MapClaims{
 		"id":  userID,
-		"exp": time.Now().Add(time.Hour * 72).Unix(),
+		"exp": time.Now().Add(time.Hour * 168).Unix(),
 	}
 
-	expired := time.Now().Add(time.Hour * 72).Unix()
+	expired := time.Now().Add(time.Hour * 168).Unix()
 
 	secretKey := []byte(os.Getenv("JWTKEY"))
 
@@ -281,7 +291,7 @@ func LoginOrigin(c *fiber.Ctx) error {
 	// Create a POST request with a JSON payload
 	req, err := http.NewRequest("POST", "https://rest.pt-bks.com/olympus/login", bytes.NewReader(dataSend))
 	if err != nil {
-		fmt.Println("Error creating request:", err)
+		log.Fatal("Error creating request:", err)
 		return c.SendStatus(http.StatusInternalServerError)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -289,7 +299,7 @@ func LoginOrigin(c *fiber.Ctx) error {
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("Error sending request:", err)
+		log.Fatal("Error sending request:", err)
 		return c.SendStatus(http.StatusInternalServerError)
 	}
 	defer resp.Body.Close()
@@ -299,14 +309,14 @@ func LoginOrigin(c *fiber.Ctx) error {
 	// Read the response body
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("Error reading response:", err)
+		log.Fatal("Error reading response:", err)
 	}
 
 	// fmt.Println(string(responseBody))
 
 	responseData, err := helpers.ByteResponse(responseBody)
 	if err != nil {
-		fmt.Println("Error reading response:", err)
+		log.Fatal("Error reading response:", err)
 	}
 
 	return c.Status(resp.StatusCode).JSON(responseData)
@@ -347,7 +357,7 @@ func Login(c *fiber.Ctx) error {
 	// Create a POST request with a JSON payload
 	req, err := http.NewRequest("POST", "https://rest.pt-bks.com/olympus/login", bytes.NewReader(dataSend))
 	if err != nil {
-		fmt.Println("Error creating request:", err)
+		log.Fatal("Error creating request:", err)
 		return c.SendStatus(http.StatusInternalServerError)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -355,7 +365,7 @@ func Login(c *fiber.Ctx) error {
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("Error sending request:", err)
+		log.Fatal("Error sending request:", err)
 		return c.SendStatus(http.StatusInternalServerError)
 	}
 	defer resp.Body.Close()
@@ -363,12 +373,12 @@ func Login(c *fiber.Ctx) error {
 	// Read the response body
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("Error reading response:", err)
+		log.Fatal("Error reading response:", err)
 	}
 
 	responseData, err := helpers.ByteResponse(responseBody)
 	if err != nil {
-		fmt.Println("Error reading response:", err)
+		log.Fatal("Error reading response:", err)
 	}
 
 	switch responseData["data"].(type) {
@@ -382,8 +392,8 @@ func Login(c *fiber.Ctx) error {
 		}
 	default:
 		responseData["data"] = nil
-
 	}
+
 	return c.Status(resp.StatusCode).JSON(responseData)
 }
 func Login2(c *fiber.Ctx) error {
@@ -420,7 +430,7 @@ func Login2(c *fiber.Ctx) error {
 	// Create a POST request with a JSON payload
 	req, err := http.NewRequest("POST", "https://rest.pt-bks.com/olympus/login2", bytes.NewReader(dataSend))
 	if err != nil {
-		fmt.Println("Error creating request:", err)
+		log.Fatal("Error creating request:", err)
 		return c.SendStatus(http.StatusInternalServerError)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -428,7 +438,7 @@ func Login2(c *fiber.Ctx) error {
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("Error sending request:", err)
+		log.Fatal("Error sending request:", err)
 		return c.SendStatus(http.StatusInternalServerError)
 	}
 	defer resp.Body.Close()
@@ -436,12 +446,12 @@ func Login2(c *fiber.Ctx) error {
 	// Read the response body
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("Error reading response:", err)
+		log.Fatal("Error reading response:", err)
 	}
 
 	responseData, err := helpers.ByteResponse(responseBody)
 	if err != nil {
-		fmt.Println("Error reading response:", err)
+		log.Fatal("Error reading response:", err)
 	}
 
 	// switch responseData["data"].(type) {
@@ -497,7 +507,7 @@ func SendOtp(c *fiber.Ctx) error {
 	// Create a POST request with a JSON payload
 	req, err := http.NewRequest("POST", "https://rest.pt-bks.com/olympus/sendOtpTokoku", bytes.NewReader(dataSend))
 	if err != nil {
-		fmt.Println("Error creating request:", err)
+		log.Fatal("Error creating request:", err)
 		return c.SendStatus(http.StatusInternalServerError)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -505,7 +515,7 @@ func SendOtp(c *fiber.Ctx) error {
 	// Send the request
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("Error sending request:", err)
+		log.Fatal("Error sending request:", err)
 		return c.SendStatus(http.StatusInternalServerError)
 	}
 	defer resp.Body.Close()
@@ -513,12 +523,12 @@ func SendOtp(c *fiber.Ctx) error {
 	// Read the response body
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("Error reading response:", err)
+		log.Fatal("Error reading response:", err)
 	}
 
 	responseData, err := helpers.ByteResponse(responseBody)
 	if err != nil {
-		fmt.Println("Error reading response:", err)
+		log.Fatal("Error reading response:", err)
 	}
 
 	// if len(responseData["data"].(map[string]interface{})) == 0 {
@@ -568,12 +578,12 @@ func LoginGPT(c *fiber.Ctx) error {
 	// Read response body
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("Error reading response:", err)
+		log.Fatal("Error reading response:", err)
 	}
 
 	responseData, err := helpers.ByteResponse(responseBody)
 	if err != nil {
-		fmt.Println("Error reading response:", err)
+		log.Fatal("Error reading response:", err)
 	}
 
 	return c.Status(resp.StatusCode).JSON(responseData)
@@ -583,7 +593,7 @@ func Auth(c *fiber.Ctx) error {
 
 	err := godotenv.Load()
 	if err != nil {
-		fmt.Println("Error loading .env file")
+		log.Fatal("Error loading .env file")
 	}
 
 	// Get environment variables
@@ -593,7 +603,7 @@ func Auth(c *fiber.Ctx) error {
 	// fmt.Println("oauthClientID: ", oauthClientID)
 
 	if oauthClientID == "" || oauthClientSecret == "" {
-		fmt.Println("Missing OAuth credentials")
+		log.Fatal("Missing OAuth credentials")
 	}
 
 	var oauth2Config = &oauth2.Config{
@@ -616,7 +626,7 @@ func OAuthCallback(c *fiber.Ctx) error {
 
 	err := godotenv.Load()
 	if err != nil {
-		fmt.Println("Error loading .env file")
+		log.Fatal("Error loading .env file")
 	}
 
 	// Get environment variables
@@ -626,7 +636,7 @@ func OAuthCallback(c *fiber.Ctx) error {
 	// fmt.Println("oauthClientID: ", oauthClientID)
 
 	if oauthClientID == "" || oauthClientSecret == "" {
-		fmt.Println("Missing OAuth credentials")
+		log.Fatal("Missing OAuth credentials")
 	}
 
 	var oauth2Config = &oauth2.Config{
@@ -700,7 +710,7 @@ type Claims struct {
 // 	inputRegister := new(TemplateInputRegister)
 
 // 	if err := c.BodyParser(inputRegister); err != nil {
-// 		fmt.Println(err.Error())
+// 		log.Println(err.Error())
 // 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 // 			Message: "Something went wrong",
 // 			Success: false,
@@ -715,7 +725,7 @@ type Claims struct {
 // 	err := tx.Table("public.user").Where("username = ?", inputRegister.UserName).Find(checkUser).Error
 // 	if err != nil {
 // 		tx.Rollback()
-// 		fmt.Println(err.Error())
+// 		log.Println(err.Error())
 // 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 // 			Message: "Something went wrong",
 // 			Success: false,
@@ -743,7 +753,7 @@ type Claims struct {
 // 	err = tx.Table("public.user").Create(&user).Error
 // 	if err != nil {
 // 		tx.Rollback()
-// 		fmt.Println(err.Error())
+// 		log.Println(err.Error())
 // 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 // 			Message: "Something went wrong",
 // 			Success: false,
@@ -764,7 +774,7 @@ type Claims struct {
 // 	err = tx.Table("hr.person").Create(&person).Error
 // 	if err != nil {
 // 		tx.Rollback()
-// 		fmt.Println(err.Error())
+// 		log.Println(err.Error())
 // 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 // 			Message: "Something went wrong",
 // 			Success: false,
@@ -783,7 +793,7 @@ func RegisterUser(c *fiber.Ctx) error {
 
 	err := godotenv.Load()
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
@@ -793,7 +803,7 @@ func RegisterUser(c *fiber.Ctx) error {
 	inputRegister := new(TemplateInputRegister)
 
 	if err := c.BodyParser(inputRegister); err != nil {
-		fmt.Println(err.Error())
+		log.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
@@ -808,7 +818,7 @@ func RegisterUser(c *fiber.Ctx) error {
 	err = tx.Table("public.user").Where("username = ?", inputRegister.UserName).Find(checkUser).Error
 	if err != nil {
 		tx.Rollback()
-		fmt.Println(err.Error())
+		log.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
@@ -826,7 +836,7 @@ func RegisterUser(c *fiber.Ctx) error {
 	err = tx.Table("hr.person").Where("email = ? OR ktp = ?", inputRegister.EmailAddress, inputRegister.Nik).Find(checkPerson).Error
 	if err != nil {
 		tx.Rollback()
-		fmt.Println(err.Error())
+		log.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
@@ -870,7 +880,7 @@ func RegisterUser(c *fiber.Ctx) error {
 	err = tx.Table("public.user").Create(&user).Error
 	if err != nil {
 		tx.Rollback()
-		fmt.Println(err.Error())
+		log.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
@@ -888,21 +898,21 @@ func RegisterUser(c *fiber.Ctx) error {
 	person.UserID = userID
 	person.AppId = 17
 
-	// if err := model.ValidateHrPerson(&person); err != nil {
-	// 	// return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-	// 	// 	"message": model.FormatValidationError(err),
-	// 	// 	"success": false,
-	// 	// })
-	// 	return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
-	// 		Message: model.FormatValidationError(err),
-	// 		Success: false,
-	// 	})
-	// }
+	if err := model.ValidateHrPerson(&person); err != nil {
+		// return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		// 	"message": model.FormatValidationError(err),
+		// 	"success": false,
+		// })
+		return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
+			Message: model.FormatValidationError(err),
+			Success: false,
+		})
+	}
 
 	err = tx.Table("hr.person").Create(&person).Error
 	if err != nil {
 		tx.Rollback()
-		fmt.Println(err.Error())
+		log.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
@@ -918,6 +928,7 @@ func RegisterUser(c *fiber.Ctx) error {
 														u.profile_photo,
 														p.email,
 														p.phone,
+														p.ktp,
 														ARRAY[]::varchar[] as permission,
 														NULL as userinfo
 													FROM public.user u
@@ -935,46 +946,52 @@ func RegisterUser(c *fiber.Ctx) error {
 	}
 
 	// Calculate expiration time
-	addTime := 60 * 60 * 6
-	addTime = addTime * 4 * 30
+	// addTime := 60 * 60 * 6
+	// addTime = addTime * 4 * 30
 
-	// Create a new JWT token
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
-		ID:       int64(user.ID),
-		Username: user.Username,
-		RegisteredClaims: jwt2.RegisteredClaims{
-			IssuedAt:  jwt2.NewNumericDate(time.Now()),
-			ExpiresAt: jwt2.NewNumericDate(time.Now().Add(time.Duration(addTime) * time.Second)),
-		},
-	})
+	// // Create a new JWT token
+	// token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
+	// 	ID:       int64(user.ID),
+	// 	Username: user.Username,
+	// 	RegisteredClaims: jwt2.RegisteredClaims{
+	// 		IssuedAt:  jwt2.NewNumericDate(time.Now()),
+	// 		ExpiresAt: jwt2.NewNumericDate(time.Now().Add(time.Duration(addTime) * time.Second)),
+	// 	},
+	// })
+
+	tokenString, expired, err := CreateJWT(strconv.Itoa(int(user.ID)))
+	jwtMap := map[string]interface{}{
+		"expired": expired,
+		"token":   tokenString,
+	}
 
 	// Sign the token with a secret key
 	// kunci := "your-secret-key"
-	kunci := os.Getenv("JWTKEY")
-	tokenString, err := token.SignedString([]byte(kunci))
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
-			Message: "Something went wrong",
-			Success: false,
-		})
-	}
+	// kunci := os.Getenv("JWTKEY")
+	// tokenString, err := token.SignedString([]byte(kunci))
+	// if err != nil {
+	// 	return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+	// 		Message: "Something went wrong",
+	// 		Success: false,
+	// 	})
+	// }
 
-	type jwtData struct {
-		Token   string `json:"token"`
-		Expired int    `json:"expired"`
-	}
+	// type jwtData struct {
+	// 	Token   string `json:"token"`
+	// 	Expired int    `json:"expired"`
+	// }
 
-	returnJwt := jwtData{
-		Token:   tokenString,
-		Expired: addTime,
-	}
+	// returnJwt := jwtData{
+	// 	Token:   tokenString,
+	// 	Expired: addTime,
+	// }
 
 	// return c.JSON(fiber.Map{"token": tokenString})
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Success",
 		"auth":    true,
 		"data":    datas[0],
-		"jwt":     returnJwt,
+		"jwt":     jwtMap,
 	})
 
 	// return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
@@ -1074,7 +1091,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 		})
 	}
 
-	if len(checkPerson.Email) != 0 && checkPerson.Email == UpdateProfile.EmailAddress {
+	if len(checkPerson.Email) != 0 && checkPerson.Email == UpdateProfile.EmailAddress && checkPerson.UserID != UpdateProfile.ID {
 		tx.Rollback()
 		return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
 			Message: "Email already exists",
@@ -1082,7 +1099,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 		})
 	}
 
-	if len(checkPerson.Ktp) != 0 && checkPerson.Ktp == UpdateProfile.Ktp {
+	if len(checkPerson.Ktp) != 0 && checkPerson.Ktp == UpdateProfile.Ktp && checkPerson.UserID != UpdateProfile.ID {
 		tx.Rollback()
 		return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
 			Message: "NIK already exists",
@@ -1090,7 +1107,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 		})
 	}
 
-	if len(checkPerson.Phone) != 0 && checkPerson.Phone == UpdateProfile.PhoneNumber {
+	if len(checkPerson.Phone) != 0 && checkPerson.Phone == UpdateProfile.PhoneNumber && checkPerson.UserID != UpdateProfile.ID {
 		tx.Rollback()
 		return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
 			Message: "Phone already exists",
@@ -1153,6 +1170,13 @@ func UpdateProfile(c *fiber.Ctx) error {
 		log.Println(err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	if len(datas) == 0 {
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Data not found",
 			Success: false,
 		})
 	}
