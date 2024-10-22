@@ -112,7 +112,7 @@ func InsertReview(c *fiber.Ctx) error {
 	}
 
 	var tempPoints int16
-	if len(pointsRule) >= 0 {
+	if len(pointsRule) >= 0 && review.OrderId != 0 {
 		reviewValue := reflect.ValueOf(review).Elem()
 
 		for _, rule := range pointsRule {

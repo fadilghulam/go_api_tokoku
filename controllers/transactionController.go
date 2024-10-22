@@ -149,6 +149,38 @@ func GetTransactions(c *fiber.Ctx) error {
 							FROM tk.review rev WHERE customer_id = %s AND order_item_id IS NULL
 					) sq
 					GROUP BY order_id
+				), data_penjualan as (
+					SELECT pj.id, pj.customer_id, pj.total_penjualan, pj.tanggal_penjualan,
+							CASE WHEN COUNT(pd.id) = 1 THEN NULL ELSE COUNT(pd.id) - 1 END as jumlah_produk,
+									JSONB_AGG(
+						JSONB_BUILD_OBJECT(
+							'id', pj.id,
+							'produk_id', p.id,
+							'code', p.code,
+							'name', p.name,
+							'harga', pd.harga,
+							'image', p.foto,
+							'point', 0,
+							'qty', pd.jumlah,
+							'produk_satuan', JSONB_BUILD_OBJECT(
+															'carton', ps.carton,
+															'ball', ps.ball,
+															'slof', ps.slof,
+															'pack', ps.pack
+														)
+						) ORDER BY p.id
+					) as products
+					
+					FROM penjualan pj
+					JOIN penjualan_detail pd
+						ON pj.id = pd.penjualan_id
+					JOIN produk p
+						ON pd.produk_id = p.id
+					LEFT JOIN produk_satuan ps
+						ON p.satuan_id = ps.id
+					WHERE pj.customer_id = %s
+					GROUP BY pj.id
+					
 				)
 
 				SELECT tr.id||'' as id, 
@@ -208,25 +240,8 @@ func GetTransactions(c *fiber.Ctx) error {
 				UNION 
 
 				SELECT pj.id||'' as id, 
-					JSONB_AGG(
-						JSONB_BUILD_OBJECT(
-							'id', pj.id,
-							'produk_id', p.id,
-							'code', p.code,
-							'name', p.name,
-							'harga', pd.harga,
-							'image', p.foto,
-							'point', 0,
-							'qty', pd.jumlah,
-							'produk_satuan', JSONB_BUILD_OBJECT(
-															'carton', ps.carton,
-															'ball', ps.ball,
-															'slof', ps.slof,
-															'pack', ps.pack
-														)
-						) ORDER BY p.id
-					) as products,
-					CASE WHEN COUNT(pd.id) = 1 THEN NULL ELSE COUNT(pd.id) - 1 END as jumlah_produk,
+					pj.products,
+					pj.jumlah_produk,
 					JSONB_AGG(
 							JSONB_BUILD_OBJECT(
 								'salesman', rev.value_salesman,
@@ -244,27 +259,22 @@ func GetTransactions(c *fiber.Ctx) error {
 							'phone', s.phone,
 							'type', tr.reference_name
 						) as courier
-				FROM penjualan pj
+				FROM data_penjualan pj
 				LEFT JOIN tk.transaction tr
 					ON tr.penjualan_id IS NOT NULL
 					AND pj.id = tr.penjualan_id
 				LEFT JOIN tk.transaction_state ts
 					ON ts.id = tr.transaction_state_id
-				JOIN penjualan_detail pd
-					ON pj.id = pd.penjualan_id
-				JOIN produk p
-					ON pd.produk_id = p.id
-				LEFT JOIN produk_satuan ps
-					ON p.satuan_id = ps.id
 				LEFT JOIN data_review rev
 					ON pj.id = rev.order_id
 				LEFT JOIN salesman s
 					ON tr.reference_id = s.id
 					AND tr.reference_name = 'SALESMAN'
 				WHERE pj.customer_id = %s AND COALESCE(ts.name, 'ACCEPTED') = UPPER('%s')
-				GROUP BY tr.id, pj.id, ts.id, s.id
+				GROUP BY tr.id, pj.id, ts.id, s.id, pj.products, pj.jumlah_produk, pj.total_penjualan, pj.tanggal_penjualan
 				) sq
-				ORDER BY sq.transaction_date DESC`, customerId, customerId, types, customerId, types)
+				ORDER BY sq.transaction_date DESC`, customerId, customerId, customerId, types, customerId, types)
+
 	} else {
 
 		if transactionId != "" && table != "" {
@@ -603,6 +613,7 @@ func GetTransactions(c *fiber.Ctx) error {
 
 	var tempTotalPages int
 	if len(tempResults[0]) < iPageSize {
+		// if tempResults[0][0]["jumlah_data"].(int) < iPageSize {
 		tempTotalPages = 1
 	} else {
 		tempTotalPages = int(math.Ceil(float64(len(tempResults[0])) / float64(iPageSize)))

@@ -1,10 +1,79 @@
 package model
 
 import (
+	"database/sql/driver"
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 const TableNameCustomer = "customer"
+
+type Int64Array []int64
+
+func (a Int64Array) Value() (driver.Value, error) {
+	// Convert []int64 to []interface{}
+	var arr = make([]interface{}, len(a))
+	for i, v := range a {
+		arr[i] = v
+	}
+	return arr, nil
+}
+
+func (a Int64Array) Value2() (driver.Value, error) {
+	// Convert to []int64 to []int64 for pq.Array
+	int64Array := make([]int64, len(a))
+	for i, v := range a {
+		int64Array[i] = int64(v)
+	}
+	return pq.Array(int64Array), nil
+}
+
+// Scan converts a PostgreSQL array to Int64Array.
+func (a *Int64Array) Scan(value interface{}) error {
+	var ints []int64
+
+	switch v := value.(type) {
+	case string:
+		// Handle the case where the array is returned as a string
+		trimmed := strings.Trim(v, "{}")
+		if len(trimmed) == 0 {
+			*a = []int64{}
+			return nil
+		}
+		strElements := strings.Split(trimmed, ",")
+		for _, strElem := range strElements {
+			i, err := strconv.Atoi(strElem)
+			if err != nil {
+				return err
+			}
+			ints = append(ints, int64(i))
+		}
+	case []byte:
+		// Handle the case where the array is returned as []byte
+		trimmed := strings.Trim(string(v), "{}")
+		if len(trimmed) == 0 {
+			*a = []int64{}
+			return nil
+		}
+		strElements := strings.Split(trimmed, ",")
+		for _, strElem := range strElements {
+			i, err := strconv.Atoi(strElem)
+			if err != nil {
+				return err
+			}
+			ints = append(ints, int64(i))
+		}
+	default:
+		return fmt.Errorf("unsupported data type: %T", v)
+	}
+
+	*a = ints
+	return nil
+}
 
 // Customer mapped from table <customer>
 type Customer struct {
@@ -73,7 +142,13 @@ type Customer struct {
 		REGULAR
 		RECOMENDATION
 	*/
-	Tag string `gorm:"column:tag;not null;default:REGULAR;comment:REGULAR\nRECOMENDATION" json:"tag"`
+	Tag               string     `gorm:"column:tag;not null;default:REGULAR;comment:REGULAR\nRECOMENDATION" json:"tag"`
+	UserID            int32      `gorm:"column:user_id" json:"user_id"`
+	IsCountInsentif   int16      `gorm:"column:is_count_insentif" json:"is_count_insentif"`
+	PlafonOverNominal float64    `gorm:"column:plafon_over_nominal" json:"plafon_over_nominal"`
+	PlafonOverAccess  time.Time  `gorm:"column:plafon_over_access" json:"plafon_over_access"`
+	CustomerIDs       Int64Array `gorm:"type:bigint[];column:customer_ids" json:"customer_ids"`
+	UserIDHolder      int32      `gorm:"column:user_id_holder" json:"user_id_holder"`
 }
 
 // TableName Customer's table name

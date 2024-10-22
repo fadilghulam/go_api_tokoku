@@ -95,6 +95,7 @@ func Setup(app *fiber.App) {
 	app.Post("/quickCheckout", controllers.QuickCheckout)
 
 	app.Get("/getFlagToday", controllers.GetFlagToday)
+	app.Get("/generateTransaction", controllers.GenerateTransactionsUserId)
 
 	// app.Post("/TestHash", controllers.TestHash)
 
@@ -168,6 +169,8 @@ func Setup(app *fiber.App) {
 
 	//Notification routes
 	authGroup.Get("/getNotification", controllers.GetNotifications)
+	authGroup.Post("/setNotifSetting", controllers.SetNotificationSettings)
+	authGroup.Get("/getNotifSetting", controllers.GetNotificationSettings)
 	// authGroup.Post("/insertReview", controllers.InsertReview)
 
 	// //reports

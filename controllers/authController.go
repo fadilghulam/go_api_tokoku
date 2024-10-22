@@ -150,7 +150,7 @@ func LoginOauth(c *fiber.Ctx) error {
 			data = map[string]interface{}{
 				"email":         email,
 				"employee":      nil,
-				"id":            user.ID,
+				"id":            newUser.ID,
 				"name":          name,
 				"permission":    nil,
 				"phone":         nil,
@@ -1081,7 +1081,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 		})
 	}
 
-	err = tx.Where("email = ? OR ktp = ?", UpdateProfile.EmailAddress, UpdateProfile.Ktp).Find(&checkPerson).Error
+	err = tx.Where("email = ? OR ktp = ? AND app_id = 17", UpdateProfile.EmailAddress, UpdateProfile.Ktp).Find(&checkPerson).Error
 	if err != nil {
 		tx.Rollback()
 		log.Println(err.Error())
@@ -1091,7 +1091,31 @@ func UpdateProfile(c *fiber.Ctx) error {
 		})
 	}
 
-	if len(checkPerson.Email) != 0 && checkPerson.Email == UpdateProfile.EmailAddress && checkPerson.UserID != UpdateProfile.ID {
+	// if len(checkPerson.Email) != 0 && checkPerson.Email == UpdateProfile.EmailAddress && checkPerson.UserID != UpdateProfile.ID {
+	// 	tx.Rollback()
+	// 	return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
+	// 		Message: "Email already exists",
+	// 		Success: false,
+	// 	})
+	// }
+
+	// if len(checkPerson.Ktp) != 0 && checkPerson.Ktp == UpdateProfile.Ktp && checkPerson.UserID != UpdateProfile.ID {
+	// 	tx.Rollback()
+	// 	return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
+	// 		Message: "NIK already exists",
+	// 		Success: false,
+	// 	})
+	// }
+
+	// if len(checkPerson.Phone) != 0 && checkPerson.Phone == UpdateProfile.PhoneNumber && checkPerson.UserID != UpdateProfile.ID {
+	// 	tx.Rollback()
+	// 	return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
+	// 		Message: "Phone already exists",
+	// 		Success: false,
+	// 	})
+	// }
+
+	if checkPerson.Email == UpdateProfile.EmailAddress && checkPerson.UserID != UpdateProfile.ID {
 		tx.Rollback()
 		return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
 			Message: "Email already exists",
@@ -1099,7 +1123,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 		})
 	}
 
-	if len(checkPerson.Ktp) != 0 && checkPerson.Ktp == UpdateProfile.Ktp && checkPerson.UserID != UpdateProfile.ID {
+	if checkPerson.Ktp == UpdateProfile.Ktp && checkPerson.UserID != UpdateProfile.ID {
 		tx.Rollback()
 		return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
 			Message: "NIK already exists",
@@ -1107,7 +1131,7 @@ func UpdateProfile(c *fiber.Ctx) error {
 		})
 	}
 
-	if len(checkPerson.Phone) != 0 && checkPerson.Phone == UpdateProfile.PhoneNumber && checkPerson.UserID != UpdateProfile.ID {
+	if checkPerson.Phone == UpdateProfile.PhoneNumber && checkPerson.UserID != UpdateProfile.ID {
 		tx.Rollback()
 		return c.Status(fiber.StatusBadRequest).JSON(helpers.ResponseWithoutData{
 			Message: "Phone already exists",

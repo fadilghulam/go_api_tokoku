@@ -515,10 +515,10 @@ func SendNotification(title string, body string, userIds int, customerId int64, 
 
 	// fmt.Println(userIds)
 
-	err := db.DB.Where("user_id IN ? AND app_name = ? AND customer_id = ?", userIds, "tokoku", customerId).Find(&tokenFCM).Error
+	err := db.DB.Where("user_id IN (?) AND app_name = ? AND customer_id = ?", userIds, "tokoku", customerId).Find(&tokenFCM).Error
 
 	if err != nil {
-		log.Println(err.Error())
+		fmt.Println("error executing query ", err.Error())
 		return c.Status(fiber.StatusInternalServerError).JSON(ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
@@ -551,7 +551,7 @@ func SendNotification(title string, body string, userIds int, customerId int64, 
 	ctx := context.Background()
 	app, err := firebase.NewApp(ctx, nil, opt)
 	if err != nil {
-		log.Fatalf("error initializing app: %v\n", err)
+		fmt.Printf("error initializing app: %v\n", err)
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to initialize Firebase app",
 		})
@@ -560,7 +560,7 @@ func SendNotification(title string, body string, userIds int, customerId int64, 
 	// Initialize the FCM client
 	client, err := app.Messaging(ctx)
 	if err != nil {
-		log.Fatalf("error getting Messaging client: %v\n", err)
+		fmt.Printf("error getting Messaging client: %v\n", err)
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to initialize FCM client",
 		})
@@ -579,13 +579,13 @@ func SendNotification(title string, body string, userIds int, customerId int64, 
 	// Send the message
 	response, err := client.SendMulticast(ctx, message)
 	if err != nil {
-		log.Fatalf("error sending FCM message: %v\n", err)
+		fmt.Printf("error sending FCM message: %v\n", err)
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to send FCM notification",
 		})
 	}
 
-	log.Printf("Successfully sent FCM message: %v\n", response)
+	fmt.Println("Successfully sent FCM message to ", req.Tokens)
 	return c.JSON(fiber.Map{
 		"message": "Notification sent successfully",
 		"success": response.SuccessCount,

@@ -525,11 +525,11 @@ func CheckoutCart(c *fiber.Ctx) error {
 																) sq
 																ORDER BY sq.estimated_date
 																LIMIT 1
-																)
+															)
 
-																SELECT DATE(estimated_date) as estimated_date FROM get_estimated
-																UNION
-																SELECT DATE(CURRENT_DATE + '2 week'::interval) as estimated_date`, customer_id))
+															SELECT DATE(estimated_date) as estimated_date FROM get_estimated
+															UNION
+															SELECT DATE(CURRENT_DATE + '2 week'::interval) as estimated_date`, customer_id))
 
 	if err != nil {
 		tx.Rollback()
@@ -540,9 +540,8 @@ func CheckoutCart(c *fiber.Ctx) error {
 		})
 	}
 
+	var transactionID int
 	for i := 0; i < len(result); i++ {
-
-		var transactionID int
 
 		transaction := model.TkTransaction{
 			TransactionStateID: 1,
@@ -554,7 +553,7 @@ func CheckoutCart(c *fiber.Ctx) error {
 			StoreID:            helpers.ConvertStringToInt64(result[i]["store_id"].(string)),
 			Note:               note,
 			Kelurahan:          kel,
-			EstimateDate:       getEstimateDate[0]["estimated_date"].(time.Time),
+			EstimateDate:       getEstimateDate[0]["estimated_date"].(string),
 			// StoreID:            result[i]["store_id"].(int64),
 		}
 
@@ -622,12 +621,47 @@ func CheckoutCart(c *fiber.Ctx) error {
 		})
 	}
 
+	notifSetting := new(model.TkNotificationSetting)
+
+	if err := tx.Where("customer_id = ?", customer_id).First(&notifSetting).Error; err != nil {
+		tx.Rollback()
+		log.Println("failed to get notif setting: ", err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	dataCustomer := new(model.Customer)
+
+	if err := tx.Table("public.customer").Where("id = ?", customer_id).First(&dataCustomer).Error; err != nil {
+		tx.Rollback()
+		log.Println("failed to get customer: ", err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
 	if err := tx.Commit().Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
 		})
 	} else {
+
+		if *notifSetting.OnTransaction == 1 {
+
+			dataFcm := make(map[string]string)
+			dataFcm["url"] = "md.transaction"
+			dataFcm["dataId"] = strconv.Itoa(transactionID)
+			dataFcm["popUp"] = "1"
+			dataFcm["title"] = "Transaction"
+			dataFcm["body"] = "Transaction succesfully inserted"
+
+			go helpers.SendNotification("Transaction", "Transaction succesfully inserted", int(dataCustomer.UserID), dataCustomer.ID, dataFcm, c)
+		}
+
 		return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
 			Message: "Cart has been processed",
 			Success: true,
@@ -656,7 +690,6 @@ func QuickCheckout(c *fiber.Ctx) error {
 		RayonID    int64     `json:"rayonId"`
 		BranchID   int64     `json:"branchId"`
 		VoucherID  int64     `json:"voucherId"`
-		TotalPrice int64     `json:"totalPrice"`
 		Products   []product `json:"product"`
 	}
 
@@ -671,29 +704,6 @@ func QuickCheckout(c *fiber.Ctx) error {
 		})
 	}
 
-	// fmt.Println(requestBody.Products)
-
-	// for i := 0; i < len(requestBody.Products); i++ {
-	// 	fmt.Println(requestBody.Products[i].Point)
-	// 	// transactionDetail := model.TkTransactionDetail{
-	// 	// 	TransactionID: int64(transactionID),
-	// 	// 	ProdukID:      int64(requestBody.Products[i].ProdukId),
-	// 	// 	Qty:           requestBody.Products[i].Quantity,
-	// 	// 	Harga:         requestBody.Products[i].Harga,
-	// 	// 	Diskon:        requestBody.Products[i].Diskon,
-	// 	// 	Point:         int64(requestBody.Products[i].Point),
-	// 	// }
-
-	// 	// if err := tx.Create(&transactionDetail).Error; err != nil {
-	// 	// 	tx.Rollback()
-	// 	// 	log.Println("failed to insert transaction: ", err.Error())
-	// 	// 	return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
-	// 	// 		Message: "Something went wrong",
-	// 	// 		Success: false,
-	// 	// 	})
-	// 	// }
-	// }
-
 	tx := db.DB.Begin()
 
 	var transactionID int
@@ -707,7 +717,6 @@ func QuickCheckout(c *fiber.Ctx) error {
 		Kecamatan:          requestBody.Kecamatan,
 		Kelurahan:          requestBody.Kelurahan,
 		Note:               requestBody.Note,
-		TotalTransaction:   requestBody.TotalPrice,
 	}
 
 	if requestBody.SrID != 0 {
@@ -765,12 +774,47 @@ func QuickCheckout(c *fiber.Ctx) error {
 		}
 	}
 
+	notifSetting := new(model.TkNotificationSetting)
+
+	if err := tx.Where("customer_id = ?", requestBody.CustomerID).First(&notifSetting).Error; err != nil {
+		tx.Rollback()
+		log.Println("failed to get notif setting: ", err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	dataCustomer := new(model.Customer)
+
+	if err := tx.Table("public.customer").Where("id = ?", requestBody.CustomerID).First(&dataCustomer).Error; err != nil {
+		tx.Rollback()
+		log.Println("failed to get customer: ", err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
 	if err := tx.Commit().Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
 		})
 	} else {
+
+		if *notifSetting.OnTransaction == 1 {
+
+			dataFcm := make(map[string]string)
+			dataFcm["url"] = "md.transaction"
+			dataFcm["dataId"] = strconv.Itoa(transactionID)
+			dataFcm["popUp"] = "1"
+			dataFcm["title"] = "Transaction"
+			dataFcm["body"] = "Transaction succesfully inserted"
+
+			go helpers.SendNotification("Transaction", "Transaction succesfully inserted", int(dataCustomer.UserID), dataCustomer.ID, dataFcm, c)
+		}
+
 		return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
 			Message: "Checkout success",
 			Success: true,

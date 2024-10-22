@@ -18,6 +18,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
 	"gopkg.in/gomail.v2"
+	"gorm.io/gorm/clause"
 )
 
 func GetNotifications(c *fiber.Ctx) error {
@@ -389,5 +390,121 @@ func SendEmail(c *fiber.Ctx) error {
 	return c.Status(http.StatusOK).JSON(fiber.Map{
 		"message": "Email sent successfully",
 		"success": true,
+	})
+}
+
+func SetNotificationSettings(c *fiber.Ctx) error {
+	notificationSettingInput := new(model.TkNotificationSettingInput)
+
+	if err := c.BodyParser(notificationSettingInput); err != nil {
+		log.Println(err.Error())
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+			"message": "Failed to parse request body",
+			"success": false,
+		})
+	}
+
+	notificationSetting := new(model.TkNotificationSetting)
+
+	notificationSetting.CustomerId = notificationSettingInput.CustomerId
+	if notificationSettingInput.OnTransaction {
+		notificationSetting.OnTransaction = new(int16)
+		*notificationSetting.OnTransaction = 1
+	} else {
+		notificationSetting.OnTransaction = new(int16)
+		*notificationSetting.OnTransaction = 0
+	}
+
+	if notificationSettingInput.OnNewPoint {
+		notificationSetting.OnNewPoint = new(int16)
+		*notificationSetting.OnNewPoint = 1
+	} else {
+		notificationSetting.OnNewPoint = new(int16)
+		*notificationSetting.OnNewPoint = 0
+	}
+
+	if notificationSettingInput.OnUsePoint {
+		notificationSetting.OnUsePoint = new(int16)
+		*notificationSetting.OnUsePoint = 1
+	} else {
+		notificationSetting.OnUsePoint = new(int16)
+		*notificationSetting.OnUsePoint = 0
+	}
+
+	if notificationSettingInput.Sound {
+		notificationSetting.Sound = new(int16)
+		*notificationSetting.Sound = 1
+	} else {
+		notificationSetting.Sound = new(int16)
+		*notificationSetting.Sound = 0
+	}
+
+	if notificationSettingInput.Vibration {
+		notificationSetting.Vibration = new(int16)
+		*notificationSetting.Vibration = 1
+	} else {
+		notificationSetting.Vibration = new(int16)
+		*notificationSetting.Vibration = 0
+	}
+
+	fmt.Println(notificationSetting)
+
+	tx := db.DB.Begin()
+
+	if err := tx.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "customer_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"on_transaction", "on_new_point", "on_use_point", "sound", "vibration"}),
+	}).Create(&notificationSetting).Error; err != nil {
+		tx.Rollback()
+		log.Println(err.Error())
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+			"message": "Failed to insert notification setting",
+			"success": false,
+		})
+	}
+
+	// if err := db.DB.Create(notificationSetting).Error; err != nil {
+	// 	tx.Rollback()
+	// 	log.Println(err.Error())
+	// 	return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+	// 		"message": "Failed to insert notification setting",
+	// 		"success": false,
+	// 	})
+	// }
+
+	if err := tx.Commit().Error; err != nil {
+		tx.Rollback()
+		log.Println(err.Error())
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+			"message": "Failed to commit transaction",
+			"success": false,
+		})
+	}
+
+	return c.Status(http.StatusOK).JSON(helpers.ResponseWithoutData{
+		Message: "Notification settings has been set",
+		Success: true,
+	})
+
+}
+
+func GetNotificationSettings(c *fiber.Ctx) error {
+	customerId := c.Query("customerId")
+
+	notificationSetting := model.TkNotificationSetting{}
+
+	err := db.DB.Where("customer_id = ?", customerId).First(&notificationSetting).Error
+	if err != nil {
+		log.Println(err.Error())
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{
+			"message": "Data not found",
+			"success": false,
+		})
+	}
+
+	return c.Status(http.StatusOK).JSON(helpers.Response{
+		Message: "Notification settings has been loaded",
+		Success: true,
+		Data:    notificationSetting,
 	})
 }

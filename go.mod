@@ -17,7 +17,6 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/zishang520/engine.io/v2 v2.2.2
 	github.com/zishang520/socket.io/v2 v2.2.2
 	golang.org/x/oauth2 v0.21.0
 	golang.org/x/text v0.17.0
@@ -81,6 +80,7 @@ require (
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/xo/terminfo v0.0.0-20210125001918-ca9a967f8778 // indirect
 	github.com/zishang520/engine.io-go-parser v1.2.5 // indirect
+	github.com/zishang520/engine.io/v2 v2.2.2 // indirect
 	github.com/zishang520/socket.io-go-parser/v2 v2.2.0 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0 // indirect
