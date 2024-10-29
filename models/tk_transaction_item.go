@@ -5,7 +5,7 @@ import "time"
 const TableNameTkTransactionItem = "tk.transaction_item"
 
 type TkTransactionItem struct {
-	ID                 int64     `gorm:"column:id;primaryKey;autoIncrement:true" json:"id"`
+	ID                 int       `gorm:"column:id;primaryKey;autoIncrement:true" json:"id"`
 	TransactionStateID int64     `gorm:"column:transaction_state_id" json:"transaction_state_id"`
 	CustomerID         int64     `gorm:"column:customer_id" json:"customer_id"`
 	ReferenceID        int64     `gorm:"column:reference_id;default:null" json:"reference_id"`

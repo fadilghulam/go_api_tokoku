@@ -8,10 +8,12 @@ import (
 	"go_api_tokoku/helpers"
 	model "go_api_tokoku/models"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -24,28 +26,220 @@ import (
 func GetNotifications(c *fiber.Ctx) error {
 
 	customerId := c.Query("customerId")
+	page := c.Query("page")
+	pageSize := c.Query("pageSize")
 
-	notification := []model.TkNotification{}
+	// notification := []model.TkNotification{}
 
-	err := db.DB.Where("customer_id = ?", customerId).Find(&notification).Error
-	if err != nil {
-		log.Println(err.Error())
-		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
-			Message: "Something went wrong",
-			Success: false,
-		})
+	var tempPs, tempP int
+
+	iPage, _ := strconv.Atoi(page)
+
+	if pageSize == "" {
+		tempPs = 20
+	} else {
+		tempPs, _ = strconv.Atoi(pageSize)
+	}
+	if page == "" {
+		tempP = 0
+	} else {
+		tempP = iPage - 1
 	}
 
-	if len(notification) == 0 {
-		log.Println("Data not found")
+	tempQ := tempP * tempPs
+
+	var wg sync.WaitGroup
+	resultsChan := make(chan map[int][]map[string]interface{}, 2)
+
+	query := fmt.Sprintf("SELECT * FROM tk.notification WHERE customer_id = '%s' ORDER BY created_at DESC ", customerId)
+
+	queries := []string{
+		query,
+		query + fmt.Sprintf(" LIMIT %v OFFSET %v", tempPs, tempQ),
+	}
+
+	tempResults := make([][]map[string]interface{}, len(queries))
+
+	// Launch concurrent Goroutines
+	for i, query := range queries {
+		wg.Add(1)
+		go executeGORMQuery(query, resultsChan, i, &wg)
+	}
+
+	// Wait for all Goroutines to finish
+	wg.Wait()
+	close(resultsChan)
+
+	for result := range resultsChan {
+		for index, res := range result {
+			tempResults[index] = res
+		}
+	}
+
+	if len(tempResults) == 0 {
 		return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
 			Message: "Data not found",
 			Success: true,
 		})
 	}
 
-	return c.Status(fiber.StatusOK).JSON(helpers.ResponseDataMultiple{
-		Message: "Data notification has been loaded",
+	type newResponseDataMultiple struct {
+		Message    string      `json:"message"`
+		Success    bool        `json:"success"`
+		Data       interface{} `json:"datas"`
+		TotalPages int         `json:"total_pages"`
+	}
+
+	// fmt.Println(tempPs, len(tempResults[0]))
+
+	var tempTotalPages int
+	if len(tempResults[0]) < tempPs {
+		tempTotalPages = 1
+	} else {
+		tempTotalPages = int(math.Ceil(float64(len(tempResults[0])) / float64(tempPs)))
+	}
+
+	return c.Status(fiber.StatusOK).JSON(newResponseDataMultiple{
+		Message:    "Data has been loaded successfully",
+		Success:    true,
+		Data:       tempResults[1],
+		TotalPages: tempTotalPages,
+	})
+}
+
+func GetNotificationsV2(c *fiber.Ctx) error {
+	customerId := c.Query("customerId")
+	page, err := strconv.Atoi(c.Query("page", "1"))
+	if err != nil || page < 1 {
+		page = 1
+	}
+	pageSize, err := strconv.Atoi(c.Query("pageSize", "20"))
+	if err != nil || pageSize < 1 {
+		pageSize = 20
+	}
+
+	offset := (page - 1) * pageSize
+
+	// Execute the main data query with pagination
+	var notifications []map[string]interface{}
+	err = db.DB.Raw("SELECT * FROM tk.notification WHERE customer_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?", customerId, pageSize, offset).
+		Scan(&notifications).Error
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Error loading notifications",
+			Success: false,
+		})
+	}
+
+	// If no notifications found, return an appropriate response
+	if len(notifications) == 0 {
+		return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
+			Message: "Data not found",
+			Success: true,
+		})
+	}
+
+	// Count total notifications for pagination
+	var totalNotifications int64
+	err = db.DB.Raw("SELECT COUNT(*) FROM tk.notification WHERE customer_id = ?", customerId).Scan(&totalNotifications).Error
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Error counting notifications",
+			Success: false,
+		})
+	}
+
+	// Calculate total pages
+	totalPages := int(math.Ceil(float64(totalNotifications) / float64(pageSize)))
+
+	// Response struct
+	type newResponseDataMultiple struct {
+		Message    string      `json:"message"`
+		Success    bool        `json:"success"`
+		Data       interface{} `json:"datas"`
+		TotalPages int         `json:"total_pages"`
+	}
+
+	return c.Status(fiber.StatusOK).JSON(newResponseDataMultiple{
+		Message:    "Data has been loaded successfully",
+		Success:    true,
+		Data:       notifications,
+		TotalPages: totalPages,
+	})
+}
+
+func SaveNotification(c *fiber.Ctx) error {
+	return InsertNotification(nil, c)
+}
+
+func InsertNotification(data map[string]interface{}, c *fiber.Ctx) error {
+
+	notification := new(model.TkNotification)
+	type inputUpdateNotif struct {
+		ID      string `json:"id"`
+		IsClose int16  `json:"isClose"`
+	}
+
+	var err error
+
+	tx := db.DB.Begin()
+
+	if data == nil {
+
+		var input inputUpdateNotif
+
+		if err := c.BodyParser(&input); err != nil {
+			log.Println(err.Error())
+			return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+				Message: "Something went wrong",
+				Success: false,
+			})
+		}
+
+		notification.ID = input.ID
+		notification.IsClose = input.IsClose
+
+		err = tx.Model(&model.TkNotification{}).Where("id", notification.ID).Update("is_close", notification.IsClose).Error
+	} else {
+		notification.CustomerId = data["customerId"].(string)
+		notification.Title = data["title"].(string)
+		notification.Subtitle = data["subtitle"].(string)
+		notification.Description = data["description"].(string)
+		notification.ReferenceId = data["referenceId"].(string)
+		notification.ReferenceName = data["referenceName"].(string)
+		notification.IsClose = data["isClose"].(int16)
+
+		err = tx.Create(&notification).Error
+	}
+
+	if err != nil {
+		tx.Rollback()
+		fmt.Println("error saving data", err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	if err := tx.Where("id = ?", notification.ID).First(&notification).Error; err != nil {
+		tx.Rollback()
+		fmt.Println("error getting data", err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		tx.Rollback()
+		fmt.Println("error commit data", err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+	return c.Status(fiber.StatusOK).JSON(helpers.Response{
+		Message: "Notification has been added",
 		Success: true,
 		Data:    notification,
 	})

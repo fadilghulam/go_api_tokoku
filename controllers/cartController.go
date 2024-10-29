@@ -656,10 +656,20 @@ func CheckoutCart(c *fiber.Ctx) error {
 			dataFcm["url"] = "md.transaction"
 			dataFcm["dataId"] = strconv.Itoa(transactionID)
 			dataFcm["popUp"] = "1"
-			dataFcm["title"] = "Transaction"
-			dataFcm["body"] = "Transaction succesfully inserted"
+			dataFcm["title"] = "Kamu baru saja melakukan transaksi, cek sekarang!"
+			dataFcm["body"] = "Transaksi pembelian produk pada " + time.Now().Format("02 Jan 2006 15:04:05")
 
-			go helpers.SendNotification("Transaction", "Transaction succesfully inserted", int(dataCustomer.UserID), dataCustomer.ID, dataFcm, c)
+			go helpers.SendNotification("Kamu baru saja melakukan transaksi, cek sekarang!", "Transaksi pembelian produk pada "+time.Now().Format("02 Jan 2006 15:04:05"), int(dataCustomer.UserID), dataCustomer.ID, dataFcm, c)
+
+			dataNotif := make(map[string]interface{})
+			dataNotif["customerId"] = fmt.Sprintf("%v", dataCustomer.ID)
+			dataNotif["title"] = "Kamu baru saja melakukan transaksi, cek sekarang!"
+			dataNotif["description"] = "Transaksi pembelian produk pada " + time.Now().Format("02 Jan 2006 15:04:05")
+			dataNotif["referenceId"] = strconv.Itoa(transactionID)
+			dataNotif["referenceName"] = "md.transaction"
+			dataNotif["isClose"] = int16(0)
+
+			go InsertNotification(dataNotif, c)
 		}
 
 		return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
@@ -809,10 +819,21 @@ func QuickCheckout(c *fiber.Ctx) error {
 			dataFcm["url"] = "md.transaction"
 			dataFcm["dataId"] = strconv.Itoa(transactionID)
 			dataFcm["popUp"] = "1"
-			dataFcm["title"] = "Transaction"
-			dataFcm["body"] = "Transaction succesfully inserted"
+			dataFcm["title"] = "Transaksi"
+			dataFcm["body"] = "Transaksi berhasil ditambahkan"
 
-			go helpers.SendNotification("Transaction", "Transaction succesfully inserted", int(dataCustomer.UserID), dataCustomer.ID, dataFcm, c)
+			go helpers.SendNotification("Transaksi", "Transaksi berhasil ditambahkan", int(dataCustomer.UserID), dataCustomer.ID, dataFcm, c)
+
+			dataNotif := make(map[string]interface{})
+			dataNotif["customer_id"] = dataCustomer.ID
+			dataNotif["title"] = "Transaksi"
+			dataNotif["subtitle"] = "Transaksi berhasil ditambahkan"
+			dataNotif["description"] = "Transaksi berhasil ditambahkan"
+			dataNotif["reference_id"] = transactionID
+			dataNotif["reference_name"] = "md.transaction"
+			dataNotif["is_close"] = int16(0)
+
+			go InsertNotification(dataNotif, c)
 		}
 
 		return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{

@@ -451,9 +451,8 @@ func CheckOutCartItem(c *fiber.Ctx) error {
 
 	// fmt.Println(result[0]["id"].(string))
 
+	var transactionID int
 	for i := 0; i < len(result); i++ {
-
-		var transactionID int64
 
 		transactionItem := model.TkTransactionItem{
 			TransactionStateID: 1,
@@ -552,12 +551,57 @@ func CheckOutCartItem(c *fiber.Ctx) error {
 		})
 	}
 
+	notifSetting := new(model.TkNotificationSetting)
+
+	if err := tx.Where("customer_id = ?", customerId).First(&notifSetting).Error; err != nil {
+		tx.Rollback()
+		log.Println("failed to get notif setting: ", err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
+	dataCustomer := new(model.Customer)
+
+	if err := tx.Table("public.customer").Where("id = ?", customerId).First(&dataCustomer).Error; err != nil {
+		tx.Rollback()
+		log.Println("failed to get customer: ", err.Error())
+		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
+			Message: "Something went wrong",
+			Success: false,
+		})
+	}
+
 	if err := tx.Commit().Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(helpers.ResponseWithoutData{
 			Message: "Something went wrong",
 			Success: false,
 		})
 	} else {
+
+		if *notifSetting.OnUsePoint == 1 {
+
+			dataFcm := make(map[string]string)
+			dataFcm["url"] = "md.transaction_item"
+			dataFcm["dataId"] = strconv.Itoa(transactionID)
+			dataFcm["popUp"] = "1"
+			dataFcm["title"] = "Kamu baru saja menggunakan poin, cek sekarang!"
+			dataFcm["body"] = "Transaksi dilakukan pada " + time.Now().Format("02 Jan 2006 15:04:05")
+
+			go helpers.SendNotification("Kamu baru saja menggunakan poin, cek sekarang!", "Transaksi dilakukan pada "+time.Now().Format("02 Jan 2006 15:04:05"), int(dataCustomer.UserID), dataCustomer.ID, dataFcm, c)
+
+			dataNotif := make(map[string]interface{})
+			dataNotif["customerId"] = fmt.Sprintf("%v", dataCustomer.ID)
+			dataNotif["title"] = "Kamu baru saja menggunakan poin, cek sekarang!"
+			dataNotif["description"] = "Transaksi dilakukan pada " + time.Now().Format("02 Jan 2006 15:04:05")
+			dataNotif["referenceId"] = strconv.Itoa(transactionID)
+			dataNotif["referenceName"] = "md.transaction_item"
+			dataNotif["isClose"] = int16(0)
+
+			go InsertNotification(dataNotif, c)
+		}
+
 		return c.Status(fiber.StatusOK).JSON(helpers.ResponseWithoutData{
 			Message: "Cart has been processed",
 			Success: true,

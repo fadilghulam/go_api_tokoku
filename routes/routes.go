@@ -168,7 +168,8 @@ func Setup(app *fiber.App) {
 	authGroup.Get("/getMembership", controllers.GetMembership)
 
 	//Notification routes
-	authGroup.Get("/getNotification", controllers.GetNotifications)
+	authGroup.Get("/getNotification", controllers.GetNotificationsV2)
+	authGroup.Put("/saveNotification", controllers.SaveNotification)
 	authGroup.Post("/setNotifSetting", controllers.SetNotificationSettings)
 	authGroup.Get("/getNotifSetting", controllers.GetNotificationSettings)
 	// authGroup.Post("/insertReview", controllers.InsertReview)

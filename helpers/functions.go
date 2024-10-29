@@ -567,30 +567,50 @@ func SendNotification(title string, body string, userIds int, customerId int64, 
 	}
 
 	// Create the multicast message to send
-	message := &messaging.MulticastMessage{
-		Tokens: req.Tokens,
-		Notification: &messaging.Notification{
-			Title: req.Title,
-			Body:  req.Body,
-		},
-		Data: req.Data,
+	// message := &messaging.MulticastMessage{
+	// 	Tokens: req.Tokens,
+	// 	Notification: &messaging.Notification{
+	// 		Title: req.Title,
+	// 		Body:  req.Body,
+	// 	},
+	// 	Data: req.Data,
+	// }
+
+	var failureCount, successCount int
+	for i := range req.Tokens {
+		message := &messaging.Message{
+			Token: req.Tokens[i],
+			Notification: &messaging.Notification{
+				Title: req.Title,
+				Body:  req.Body,
+			},
+			Data: req.Data,
+		}
+
+		_, err := client.Send(ctx, message)
+		if err != nil {
+			fmt.Printf("error sending FCM message: %v\n", err)
+			failureCount++
+		}
+
+		successCount++
+
 	}
 
 	// Send the message
-	response, err := client.SendMulticast(ctx, message)
-	if err != nil {
-		fmt.Printf("error sending FCM message: %v\n", err)
-		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to send FCM notification",
-		})
-	}
+	// response, err := client.SendMulticast(ctx, message)
+	// if err != nil {
+	// 	fmt.Printf("error sending FCM message: %v\n", err)
+	// 	return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+	// 		"error": "Failed to send FCM notification",
+	// 	})
+	// }
 
-	fmt.Println("Successfully sent FCM message to ", req.Tokens)
 	return c.JSON(fiber.Map{
-		"message": "Notification sent successfully",
-		"success": response.SuccessCount,
-		"failure": response.FailureCount,
-		"errors":  response.Responses,
+		"message":      "Notification sent successfully",
+		"success":      true,
+		"successCount": successCount,
+		"failureCount": failureCount,
 	})
 }
 
